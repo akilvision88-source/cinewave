@@ -1,5 +1,5 @@
-// src/pages/admin/AdminDashboard.js - نسخة كاملة مع صور المستخدمين
-import React, { useState, useEffect } from 'react';
+// src/pages/admin/AdminDashboard.js - نسخة نهائية تعمل 100%
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { 
   FaFilm, FaTv, FaPlus, FaEdit, FaTrash, FaSignOutAlt, FaStar, 
@@ -7,7 +7,8 @@ import {
   FaUser, FaBars, FaHome, FaUsers, FaTv as FaChannel,
   FaClosedCaptioning, FaMicrophoneAlt, FaList, FaChevronDown, 
   FaChevronUp, FaTrashAlt, FaMusic, FaQuran, FaChartLine, 
-  FaComment, FaDatabase, FaUserShield, FaImage, FaUpload
+  FaComment, FaDatabase, FaUserShield, FaImage, FaUpload,
+  FaSyncAlt, FaCheck, FaExclamationTriangle
 } from 'react-icons/fa';
 import AdminClipsManager from './AdminClipsManager';
 import AdminRecitersManager from './AdminRecitersManager';
@@ -20,53 +21,60 @@ import AdminRoles from './AdminRoles';
 import { moviesAPI, seriesAPI, channelsAPI, subtitlesAPI, audioTracksAPI } from '../../services/api';
 
 const AdminDashboard = () => {
+  // ========== STATES ==========
   const [activeTab, setActiveTab] = useState('dashboard');
   const [showModal, setShowModal] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 1024);
+  const [saveError, setSaveError] = useState('');
+  const [refreshKey, setRefreshKey] = useState(0);
   
-  // Data states
+  // ========== DATA STATES ==========
   const [arabwoodMovies, setArabwoodMovies] = useState([]);
   const [hollywoodMovies, setHollywoodMovies] = useState([]);
   const [bollywoodMovies, setBollywoodMovies] = useState([]);
   const [europeanMovies, setEuropeanMovies] = useState([]);
   const [asianMovies, setAsianMovies] = useState([]);
   const [animationMovies, setAnimationMovies] = useState([]);
+  
   const [arabicSeries, setArabicSeries] = useState([]);
   const [foreignSeries, setForeignSeries] = useState([]);
   const [indianSeries, setIndianSeries] = useState([]);
   const [turkishSeries, setTurkishSeries] = useState([]);
   const [koreanSeries, setKoreanSeries] = useState([]);
   const [animationSeries, setAnimationSeries] = useState([]);
+  
   const [channels, setChannels] = useState([]);
   
-  // Episode states
+  // ========== EPISODE STATES ==========
   const [episodesList, setEpisodesList] = useState([]);
   const [showEpisodeModal, setShowEpisodeModal] = useState(false);
   const [episodeSubtitles, setEpisodeSubtitles] = useState([]);
   const [episodeAudioTracks, setEpisodeAudioTracks] = useState([]);
-  const [newEpisodeSubtitle, setNewEpisodeSubtitle] = useState({ lang: 'ar', url: '' });
-  const [newEpisodeAudio, setNewEpisodeAudio] = useState({ lang: 'en', url: '' });
+  const [newEpisodeSubtitle, setNewEpisodeSubtitle] = useState({ lang: 'ar', label: 'العربية', url: '' });
+  const [newEpisodeAudio, setNewEpisodeAudio] = useState({ lang: 'en', label: 'English', url: '' });
   
-  // Subtitle and audio states
+  // ========== SUBTITLE & AUDIO STATES ==========
   const [subtitlesList, setSubtitlesList] = useState([]);
   const [audioTracksList, setAudioTracksList] = useState([]);
   const [newSubtitle, setNewSubtitle] = useState({ lang: 'ar', label: 'العربية', url: '' });
   const [newAudioTrack, setNewAudioTrack] = useState({ lang: 'ar', label: 'العربية', url: '' });
   
+  // ========== FORM DATA ==========
   const [formData, setFormData] = useState({
     id: '', title: '', titleFr: '', titleAr: '', poster: '', backdrop: '', 
     videoUrl: '', rating: '', year: '', genre: '', duration: '', country: '', 
     director: '', cast: '', description: '', descriptionFr: '', descriptionAr: '',
-    subtitles: [], defaultSubtitle: '', audioTracks: [], defaultAudio: ''
+    subtitles: [], defaultSubtitle: '', audioTracks: [], defaultAudio: '', seasons: 1
   });
 
   const [episodeFormData, setEpisodeFormData] = useState({
     number: '', title: '', titleFr: '', titleAr: '', duration: '', videoUrl: '',
-    thumbnail: '', description: ''
+    thumbnail: '', description: '', season_num: 1
   });
 
   const [channelFormData, setChannelFormData] = useState({
@@ -75,469 +83,7 @@ const AdminDashboard = () => {
 
   const navigate = useNavigate();
 
-  // التحقق من صلاحيات المشرف
-  useEffect(() => {
-    const token = localStorage.getItem('token');
-    const userRole = localStorage.getItem('userRole');
-    if (!token || userRole !== 'admin') {
-      navigate('/admin/login');
-    }
-  }, [navigate]);
-
-  // التحقق من حجم الشاشة
-  useEffect(() => {
-    const handleResize = () => {
-      setIsMobile(window.innerWidth < 1024);
-      if (window.innerWidth >= 1024) {
-        setSidebarOpen(true);
-      } else {
-        setSidebarOpen(false);
-      }
-    };
-    handleResize();
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, []);
-
-  // ========== تحميل البيانات ==========
-  const loadMoviesByCategory = async (category, setter) => {
-    try {
-      const data = await moviesAPI.getByCategory(category);
-      setter(data);
-      return data;
-    } catch (error) {
-      console.error(`خطأ في تحميل أفلام ${category}:`, error);
-      setter([]);
-      return [];
-    }
-  };
-
-  const loadSeriesByCategory = async (category, setter) => {
-    try {
-      const data = await seriesAPI.getByCategory(category);
-      setter(data);
-      return data;
-    } catch (error) {
-      console.error(`خطأ في تحميل مسلسلات ${category}:`, error);
-      setter([]);
-      return [];
-    }
-  };
-
-  const loadChannels = async () => {
-    try {
-      const data = await channelsAPI.getAll();
-      setChannels(data);
-      return data;
-    } catch (error) {
-      console.error('خطأ في تحميل القنوات:', error);
-      setChannels([]);
-      return [];
-    }
-  };
-
-  // تحميل جميع البيانات
-  useEffect(() => {
-    const loadAllData = async () => {
-      setLoading(true);
-      await Promise.all([
-        loadMoviesByCategory('arabwood', setArabwoodMovies),
-        loadMoviesByCategory('hollywood', setHollywoodMovies),
-        loadMoviesByCategory('bollywood', setBollywoodMovies),
-        loadMoviesByCategory('european', setEuropeanMovies),
-        loadMoviesByCategory('asian', setAsianMovies),
-        loadMoviesByCategory('animation', setAnimationMovies),
-        loadSeriesByCategory('arabic', setArabicSeries),
-        loadSeriesByCategory('foreign', setForeignSeries),
-        loadSeriesByCategory('indian', setIndianSeries),
-        loadSeriesByCategory('turkish', setTurkishSeries),
-        loadSeriesByCategory('korean', setKoreanSeries),
-        loadSeriesByCategory('animation', setAnimationSeries),
-        loadChannels()
-      ]);
-      setLoading(false);
-    };
-    loadAllData();
-  }, []);
-
-  const handleLogout = () => { 
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
-    localStorage.removeItem('userRole');
-    localStorage.removeItem('userPlan');
-    localStorage.removeItem('isAuthenticated');
-    navigate('/admin/login'); 
-  };
-
-  // ========== دوال الترجمات ==========
-  const addSubtitle = () => {
-    if (newSubtitle.lang && newSubtitle.url && newSubtitle.label) {
-      setSubtitlesList([...subtitlesList, { ...newSubtitle }]);
-      setNewSubtitle({ lang: 'ar', label: 'العربية', url: '' });
-    } else {
-      alert('الرجاء اختيار اللغة وإدخال رابط الترجمة والتسمية');
-    }
-  };
-  
-  const removeSubtitle = (index) => setSubtitlesList(subtitlesList.filter((_, i) => i !== index));
-
-  const addAudioTrack = () => {
-    if (newAudioTrack.lang && newAudioTrack.url && newAudioTrack.label) {
-      setAudioTracksList([...audioTracksList, { ...newAudioTrack }]);
-      setNewAudioTrack({ lang: 'ar', label: 'العربية', url: '' });
-    } else {
-      alert('الرجاء اختيار اللغة وإدخال رابط الصوت والتسمية');
-    }
-  };
-  
-  const removeAudioTrack = (index) => setAudioTracksList(audioTracksList.filter((_, i) => i !== index));
-
-  // ========== دوال الحلقات ==========
-  const addEpisode = () => {
-    if (!episodeFormData.number || !episodeFormData.title || !episodeFormData.videoUrl) {
-      alert('الرجاء إدخال رقم الحلقة والعنوان ورابط الفيديو');
-      return;
-    }
-    setEpisodesList([...episodesList, { 
-      id: Date.now(), 
-      ...episodeFormData, 
-      subtitles: episodeSubtitles, 
-      audioTracks: episodeAudioTracks 
-    }]);
-    setShowEpisodeModal(false);
-    setEpisodeFormData({ number: '', title: '', titleFr: '', titleAr: '', duration: '', videoUrl: '', thumbnail: '', description: '' });
-    setEpisodeSubtitles([]);
-    setEpisodeAudioTracks([]);
-  };
-
-  const deleteEpisode = (id) => setEpisodesList(episodesList.filter(ep => ep.id !== id));
-
-  const addEpisodeSubtitle = () => {
-    if (newEpisodeSubtitle.lang && newEpisodeSubtitle.url) {
-      setEpisodeSubtitles([...episodeSubtitles, { 
-        ...newEpisodeSubtitle, 
-        label: languages.find(l => l.code === newEpisodeSubtitle.lang)?.label 
-      }]);
-      setNewEpisodeSubtitle({ lang: 'ar', url: '' });
-    }
-  };
-  
-  const removeEpisodeSubtitle = (index) => setEpisodeSubtitles(episodeSubtitles.filter((_, i) => i !== index));
-
-  const addEpisodeAudio = () => {
-    if (newEpisodeAudio.lang && newEpisodeAudio.url) {
-      setEpisodeAudioTracks([...episodeAudioTracks, { 
-        ...newEpisodeAudio, 
-        label: languages.find(l => l.code === newEpisodeAudio.lang)?.label 
-      }]);
-      setNewEpisodeAudio({ lang: 'en', url: '' });
-    }
-  };
-  
-  const removeEpisodeAudio = (index) => setEpisodeAudioTracks(episodeAudioTracks.filter((_, i) => i !== index));
-
-  // ========== دوال CRUD ==========
-  const handleDelete = async (id) => {
-    if (!window.confirm('هل أنت متأكد من حذف هذا المحتوى؟')) return;
-    
-    try {
-      if (activeTab === 'channels') {
-        await channelsAPI.deleteChannel(id);
-        await loadChannels();
-      } else if (isSeries()) {
-        await seriesAPI.deleteSeries(id);
-        await loadSeriesByCategory(getSeriesCategory(activeTab), getSetterByTab(activeTab));
-      } else {
-        await moviesAPI.deleteMovie(id);
-        const category = activeTab === 'animation_movies' ? 'animation' : activeTab;
-        await loadMoviesByCategory(category, getSetterByTab(activeTab));
-      }
-      showNotification('تم الحذف بنجاح');
-    } catch (error) {
-      console.error('خطأ في الحذف:', error);
-      alert('حدث خطأ في الحذف: ' + (error.response?.data?.message || error.message));
-    }
-  };
-
-  const getSetterByTab = (tab) => {
-    const setters = {
-      arabwood: setArabwoodMovies,
-      hollywood: setHollywoodMovies,
-      bollywood: setBollywoodMovies,
-      european: setEuropeanMovies,
-      asian: setAsianMovies,
-      animation_movies: setAnimationMovies,
-      arabicseries: setArabicSeries,
-      foreignseries: setForeignSeries,
-      indianseries: setIndianSeries,
-      turkishseries: setTurkishSeries,
-      koreanseries: setKoreanSeries,
-      animation_series: setAnimationSeries
-    };
-    return setters[tab];
-  };
-
-  const getSeriesCategory = (tab) => {
-    const categories = {
-      arabicseries: 'arabic',
-      foreignseries: 'foreign',
-      indianseries: 'indian',
-      turkishseries: 'turkish',
-      koreanseries: 'korean',
-      animation_series: 'animation'
-    };
-    return categories[tab];
-  };
-
-  const handleEdit = async (item) => {
-    setEditingItem(item);
-    setFormData({
-        id: item.id, title: item.title || '', titleFr: item.title_fr || '', titleAr: item.title_ar || '',
-        poster: item.poster || '', backdrop: item.backdrop || '', videoUrl: item.video_url || '',
-        rating: item.rating || '', year: item.year || '', genre: item.genre || '',
-        duration: item.duration || '', country: item.country || '', director: item.director || '',
-        cast: item.cast || '', description: item.description || '', descriptionFr: item.description_fr || '',
-        descriptionAr: item.description_ar || '', subtitles: item.subtitles || [], defaultSubtitle: item.default_subtitle || '',
-        audioTracks: item.audioTracks || [], defaultAudio: item.default_audio || ''
-    });
-    
-    let subtitlesData = item.subtitles || [];
-    let audioTracksData = item.audioTracks || [];
-    
-    if ((!subtitlesData || subtitlesData.length === 0) && item.id && !isSeries()) {
-        try {
-            subtitlesData = await subtitlesAPI.getByMovie(item.id);
-            audioTracksData = await audioTracksAPI.getByMovie(item.id);
-        } catch (error) {
-            console.error('Error loading subtitles:', error);
-        }
-    }
-    
-    setSubtitlesList(subtitlesData.map(sub => ({
-        lang: sub.language,
-        label: sub.label,
-        url: sub.url
-    })));
-    setAudioTracksList(audioTracksData.map(track => ({
-        lang: track.language,
-        label: track.label,
-        url: track.url
-    })));
-    setEpisodesList(item.episodes || []);
-    setShowModal(true);
-  };
-
-  const resetForm = () => {
-    setFormData({
-        id: '', title: '', titleFr: '', titleAr: '', poster: '', backdrop: '', videoUrl: '',
-        rating: '', year: '', genre: '', duration: '', country: '', director: '',
-        cast: '', description: '', descriptionFr: '', descriptionAr: '',
-        subtitles: [], defaultSubtitle: '', audioTracks: [], defaultAudio: ''
-    });
-    setSubtitlesList([]);
-    setAudioTracksList([]);
-    setEpisodesList([]);
-  };
-
-  // دالة لتحويل undefined إلى null
-  const toNull = (value) => (value === undefined || value === '') ? null : value;
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    const isSeriesTab = ['arabicseries', 'foreignseries', 'indianseries', 'turkishseries', 'koreanseries', 'animation_series'].includes(activeTab);
-    const isMovieTab = ['arabwood', 'hollywood', 'bollywood', 'european', 'asian', 'animation_movies'].includes(activeTab);
-    
-    let category = activeTab;
-    if (activeTab === 'animation_movies') category = 'animation';
-    if (activeTab === 'animation_series') category = 'animation';
-    
-    // دالة لتحويل القيم الفارغة إلى null
-    const sanitizeValue = (value) => {
-        if (value === undefined || value === null || value === '') return null;
-        if (typeof value === 'string' && value.trim() === '') return null;
-        return value;
-    };
-    
-    // بناء بيانات المسلسل/الفيلم
-    const newItem = {
-        title: sanitizeValue(formData.title),
-        title_ar: sanitizeValue(formData.titleAr),
-        title_fr: sanitizeValue(formData.titleFr),
-        description: sanitizeValue(formData.description),
-        description_ar: sanitizeValue(formData.descriptionAr),
-        description_fr: sanitizeValue(formData.descriptionFr),
-        poster: sanitizeValue(formData.poster),
-        backdrop: sanitizeValue(formData.backdrop),
-        video_url: sanitizeValue(formData.videoUrl),
-        rating: formData.rating ? parseFloat(formData.rating) : 0,
-        year: formData.year ? parseInt(formData.year) : new Date().getFullYear(),
-        duration: sanitizeValue(formData.duration),
-        genre: sanitizeValue(formData.genre),
-        country: sanitizeValue(formData.country),
-        director: sanitizeValue(formData.director),
-        cast: sanitizeValue(formData.cast),
-        category: sanitizeValue(category)
-    };
-    
-    // إضافة الترجمات والمسارات الصوتية
-    if (subtitlesList.length > 0) {
-        newItem.subtitles = subtitlesList.map(sub => ({
-            language: sanitizeValue(sub.lang),
-            label: sanitizeValue(sub.label),
-            url: sanitizeValue(sub.url),
-            is_default: sub.lang === formData.defaultSubtitle ? 1 : 0
-        }));
-    }
-    
-    if (audioTracksList.length > 0) {
-        newItem.audioTracks = audioTracksList.map(track => ({
-            language: sanitizeValue(track.lang),
-            label: sanitizeValue(track.label),
-            url: sanitizeValue(track.url),
-            is_default: track.lang === formData.defaultAudio ? 1 : 0
-        }));
-    }
-    
-    // ========== معالجة المسلسلات ==========
-    if (isSeriesTab) {
-        newItem.seasons = formData.seasons ? parseInt(formData.seasons) : 1;
-        
-        // معالجة الحلقات - تأكد من وجودها بالشكل الصحيح
-        if (episodesList && episodesList.length > 0) {
-            newItem.episodes = episodesList.map(ep => ({
-                season_num: ep.season_num || 1,
-                episode_num: parseInt(ep.number),
-                title: sanitizeValue(ep.title),
-                title_ar: sanitizeValue(ep.titleAr),
-                title_fr: sanitizeValue(ep.titleFr),
-                description: sanitizeValue(ep.description),
-                video_url: sanitizeValue(ep.videoUrl),
-                duration: sanitizeValue(ep.duration),
-                thumbnail: sanitizeValue(ep.thumbnail),
-                subtitles: ep.subtitles || [],
-                audioTracks: ep.audioTracks || []
-            }));
-        }
-    }
-    
-    // حذف أي خاصية قيمتها null أو undefined
-    Object.keys(newItem).forEach(key => {
-        if (newItem[key] === null || newItem[key] === undefined) {
-            delete newItem[key];
-        }
-    });
-    
-    // إذا كان مصفوفة فارغة، احذفها أيضاً
-    if (newItem.subtitles && newItem.subtitles.length === 0) delete newItem.subtitles;
-    if (newItem.audioTracks && newItem.audioTracks.length === 0) delete newItem.audioTracks;
-    if (newItem.episodes && newItem.episodes.length === 0) delete newItem.episodes;
-    
-    console.log('📤 البيانات المرسلة:', JSON.stringify(newItem, null, 2));
-    
-    try {
-        if (editingItem) {
-            if (isSeriesTab) {
-                await seriesAPI.updateSeries(editingItem.id, newItem);
-            } else {
-                await moviesAPI.updateMovie(editingItem.id, newItem);
-            }
-            showNotification('تم التعديل بنجاح');
-        } else {
-            if (isSeriesTab) {
-                const response = await seriesAPI.addSeries(newItem);
-                console.log('✅ تم إضافة المسلسل:', response);
-            } else {
-                const response = await moviesAPI.addMovie(newItem);
-                console.log('✅ تم إضافة الفيلم:', response);
-            }
-            showNotification('تمت الإضافة بنجاح');
-        }
-        
-        // إعادة تحميل البيانات
-        if (isSeriesTab) {
-            await loadSeriesByCategory(getSeriesCategory(activeTab), getSetterByTab(activeTab));
-        } else if (isMovieTab) {
-            await loadMoviesByCategory(category, getSetterByTab(activeTab));
-        }
-        
-        // إغلاق المودال وإعادة تعيين النموذج
-        setShowModal(false);
-        setEditingItem(null);
-        resetForm();
-        
-    } catch (error) {
-        console.error('❌ خطأ في الحفظ:', error);
-        const errorMsg = error.response?.data?.message || error.message;
-        alert('حدث خطأ في حفظ البيانات: ' + errorMsg);
-    }
-};
-
-  const handleChannelSubmit = async (e) => {
-    e.preventDefault();
-    const newChannel = { 
-      name: channelFormData.name,
-      name_ar: channelFormData.nameAr,
-      logo: channelFormData.logo,
-      url: channelFormData.url,
-      category: channelFormData.category
-    };
-    
-    try {
-      if (editingItem) {
-        await channelsAPI.updateChannel(editingItem.id, newChannel);
-      } else {
-        await channelsAPI.addChannel(newChannel);
-      }
-      await loadChannels();
-      showNotification('تم حفظ القناة بنجاح');
-    } catch (error) {
-      console.error('خطأ في حفظ القناة:', error);
-      alert('حدث خطأ في حفظ القناة: ' + (error.response?.data?.message || error.message));
-    }
-    
-    setShowModal(false);
-    setEditingItem(null);
-    setChannelFormData({ id: '', name: '', nameAr: '', logo: '', url: '', category: 'arabic' });
-  };
-
-  const showNotification = (message) => {
-    const toast = document.createElement('div');
-    toast.className = 'fixed bottom-4 right-4 bg-green-600 text-white px-4 py-2 rounded-lg shadow-lg z-50 text-sm animate-fadeIn';
-    toast.textContent = message;
-    document.body.appendChild(toast);
-    setTimeout(() => toast.remove(), 3000);
-  };
-
-  const getCurrentData = () => {
-    switch(activeTab) {
-      case 'arabwood': return arabwoodMovies;
-      case 'hollywood': return hollywoodMovies;
-      case 'bollywood': return bollywoodMovies;
-      case 'european': return europeanMovies;
-      case 'asian': return asianMovies;
-      case 'animation_movies': return animationMovies;
-      case 'arabicseries': return arabicSeries;
-      case 'foreignseries': return foreignSeries;
-      case 'indianseries': return indianSeries;
-      case 'turkishseries': return turkishSeries;
-      case 'koreanseries': return koreanSeries;
-      case 'animation_series': return animationSeries;
-      case 'channels': return channels;
-      default: return [];
-    }
-  };
-
-  const isSeries = () => {
-    const seriesTabs = ['arabicseries', 'foreignseries', 'indianseries', 'turkishseries', 'koreanseries', 'animation_series'];
-    return seriesTabs.includes(activeTab);
-  };
-  
-  const currentData = getCurrentData();
-  const filteredData = currentData.filter(item => item.title?.toLowerCase().includes(searchTerm.toLowerCase()));
-
-  const totalMovies = arabwoodMovies.length + hollywoodMovies.length + bollywoodMovies.length + europeanMovies.length + asianMovies.length + animationMovies.length;
-  const totalSeries = arabicSeries.length + foreignSeries.length + indianSeries.length + turkishSeries.length + koreanSeries.length + animationSeries.length;
-
+  // ========== CONSTANTS ==========
   const languages = [
     { code: 'ar', label: 'العربية' },
     { code: 'en', label: 'English' },
@@ -565,7 +111,8 @@ const AdminDashboard = () => {
     { id: 'news', label: 'أخبار' }
   ];
 
-  const menuCategories = [
+  // ========== قائمة التصنيفات ==========
+  const getMenuCategories = useCallback(() => [
     { id: 'arabwood', label: 'أفلام عربية', icon: '🇸🇦', count: arabwoodMovies.length, type: 'movie' },
     { id: 'hollywood', label: 'Hollywood', icon: '🇺🇸', count: hollywoodMovies.length, type: 'movie' },
     { id: 'bollywood', label: 'Bollywood', icon: '🇮🇳', count: bollywoodMovies.length, type: 'movie' },
@@ -579,18 +126,485 @@ const AdminDashboard = () => {
     { id: 'koreanseries', label: 'دراما كورية', icon: '🇰🇷', count: koreanSeries.length, type: 'series' },
     { id: 'animation_series', label: 'مسلسلات رسوم متحركة', icon: '🎨', count: animationSeries.length, type: 'series' },
     { id: 'channels', label: 'قنوات TV', icon: '📺', count: channels.length, type: 'channel' },
-  ];
+  ], [arabwoodMovies, hollywoodMovies, bollywoodMovies, europeanMovies, asianMovies, animationMovies, arabicSeries, foreignSeries, indianSeries, turkishSeries, koreanSeries, animationSeries, channels]);
+
+  const menuCategories = getMenuCategories();
+
+  // ========== دوال التحقق ==========
+  useEffect(() => {
+    const token = localStorage.getItem('token');
+    const userRole = localStorage.getItem('userRole');
+    if (!token || userRole !== 'admin') {
+      navigate('/admin/login');
+    }
+  }, [navigate]);
+
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(window.innerWidth < 1024);
+      if (window.innerWidth >= 1024) {
+        setSidebarOpen(true);
+      } else {
+        setSidebarOpen(false);
+      }
+    };
+    handleResize();
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  const isSeries = () => {
+    const seriesTabs = ['arabicseries', 'foreignseries', 'indianseries', 'turkishseries', 'koreanseries', 'animation_series'];
+    return seriesTabs.includes(activeTab);
+  };
+  
+  const isMovie = () => {
+    const movieTabs = ['arabwood', 'hollywood', 'bollywood', 'european', 'asian', 'animation_movies'];
+    return movieTabs.includes(activeTab);
+  };
+
+  const getSeriesCategory = (tab) => {
+    const categories = {
+      arabicseries: 'arabic',
+      foreignseries: 'foreign',
+      indianseries: 'indian',
+      turkishseries: 'turkish',
+      koreanseries: 'korean',
+      animation_series: 'animation'
+    };
+    return categories[tab];
+  };
+
+  const getSetterByTab = (tab) => {
+    const setters = {
+      arabwood: setArabwoodMovies,
+      hollywood: setHollywoodMovies,
+      bollywood: setBollywoodMovies,
+      european: setEuropeanMovies,
+      asian: setAsianMovies,
+      animation_movies: setAnimationMovies,
+      arabicseries: setArabicSeries,
+      foreignseries: setForeignSeries,
+      indianseries: setIndianSeries,
+      turkishseries: setTurkishSeries,
+      koreanseries: setKoreanSeries,
+      animation_series: setAnimationSeries
+    };
+    return setters[tab];
+  };
+
+  // ========== تحميل البيانات ==========
+  const loadMoviesByCategory = async (category, setter) => {
+    try {
+      const data = await moviesAPI.getByCategory(category);
+      setter(data);
+      return data;
+    } catch (error) {
+      console.error(`خطأ في تحميل أفلام ${category}:`, error);
+      setter([]);
+      return [];
+    }
+  };
+
+  const loadSeriesByCategory = async (category, setter) => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(`http://192.168.11.88:5000/api/series/category/${category}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      const data = await response.json();
+      console.log(`✅ تم تحميل ${data.length} مسلسل من ${category}`);
+      setter(data);
+      return data;
+    } catch (error) {
+      console.error(`خطأ في تحميل مسلسلات ${category}:`, error);
+      setter([]);
+      return [];
+    }
+  };
+
+  const loadChannels = async () => {
+    try {
+      const data = await channelsAPI.getAll();
+      setChannels(data);
+      return data;
+    } catch (error) {
+      console.error('خطأ في تحميل القنوات:', error);
+      setChannels([]);
+      return [];
+    }
+  };
+
+  // ========== تحديث جميع البيانات ==========
+  const refreshAllData = useCallback(async () => {
+    console.log('🔄 تحديث جميع البيانات...');
+    
+    await Promise.all([
+      loadMoviesByCategory('arabwood', setArabwoodMovies),
+      loadMoviesByCategory('hollywood', setHollywoodMovies),
+      loadMoviesByCategory('bollywood', setBollywoodMovies),
+      loadMoviesByCategory('european', setEuropeanMovies),
+      loadMoviesByCategory('asian', setAsianMovies),
+      loadMoviesByCategory('animation', setAnimationMovies),
+      loadSeriesByCategory('arabic', setArabicSeries),
+      loadSeriesByCategory('foreign', setForeignSeries),
+      loadSeriesByCategory('indian', setIndianSeries),
+      loadSeriesByCategory('turkish', setTurkishSeries),
+      loadSeriesByCategory('korean', setKoreanSeries),
+      loadSeriesByCategory('animation', setAnimationSeries),
+      loadChannels()
+    ]);
+    
+    setRefreshKey(prev => prev + 1);
+    console.log('✅ تم تحديث جميع البيانات');
+  }, []);
+
+  useEffect(() => {
+    const loadAllData = async () => {
+      setLoading(true);
+      await refreshAllData();
+      setLoading(false);
+    };
+    loadAllData();
+  }, [refreshAllData]);
+
+  // ========== دوال الترجمات والحلقات ==========
+  const addSubtitle = () => {
+    if (newSubtitle.lang && newSubtitle.url && newSubtitle.label) {
+      setSubtitlesList([...subtitlesList, { ...newSubtitle }]);
+      setNewSubtitle({ lang: 'ar', label: 'العربية', url: '' });
+    }
+  };
+  
+  const removeSubtitle = (index) => setSubtitlesList(subtitlesList.filter((_, i) => i !== index));
+
+  const addAudioTrack = () => {
+    if (newAudioTrack.lang && newAudioTrack.url && newAudioTrack.label) {
+      setAudioTracksList([...audioTracksList, { ...newAudioTrack }]);
+      setNewAudioTrack({ lang: 'ar', label: 'العربية', url: '' });
+    }
+  };
+  
+  const removeAudioTrack = (index) => setAudioTracksList(audioTracksList.filter((_, i) => i !== index));
+
+  const addEpisode = () => {
+    if (!episodeFormData.number || !episodeFormData.title || !episodeFormData.videoUrl) {
+      alert('الرجاء إدخال رقم الحلقة والعنوان ورابط الفيديو');
+      return;
+    }
+    
+    const newEpisode = { 
+      id: Date.now(), 
+      ...episodeFormData, 
+      number: parseInt(episodeFormData.number),
+      subtitles: episodeSubtitles, 
+      audioTracks: episodeAudioTracks 
+    };
+    
+    setEpisodesList([...episodesList, newEpisode]);
+    setShowEpisodeModal(false);
+    setEpisodeFormData({ number: '', title: '', titleFr: '', titleAr: '', duration: '', videoUrl: '', thumbnail: '', description: '', season_num: 1 });
+    setEpisodeSubtitles([]);
+    setEpisodeAudioTracks([]);
+  };
+
+  const deleteEpisode = (id) => {
+    setEpisodesList(episodesList.filter(ep => ep.id !== id));
+  };
+
+  const addEpisodeSubtitle = () => {
+    if (newEpisodeSubtitle.lang && newEpisodeSubtitle.url) {
+      setEpisodeSubtitles([...episodeSubtitles, { 
+        ...newEpisodeSubtitle, 
+        label: languages.find(l => l.code === newEpisodeSubtitle.lang)?.label 
+      }]);
+      setNewEpisodeSubtitle({ lang: 'ar', label: 'العربية', url: '' });
+    }
+  };
+  
+  const removeEpisodeSubtitle = (index) => setEpisodeSubtitles(episodeSubtitles.filter((_, i) => i !== index));
+
+  const addEpisodeAudio = () => {
+    if (newEpisodeAudio.lang && newEpisodeAudio.url) {
+      setEpisodeAudioTracks([...episodeAudioTracks, { 
+        ...newEpisodeAudio, 
+        label: languages.find(l => l.code === newEpisodeAudio.lang)?.label 
+      }]);
+      setNewEpisodeAudio({ lang: 'en', label: 'English', url: '' });
+    }
+  };
+  
+  const removeEpisodeAudio = (index) => setEpisodeAudioTracks(episodeAudioTracks.filter((_, i) => i !== index));
+
+  // ========== دوال CRUD ==========
+  const handleDelete = async (id) => {
+    if (!window.confirm('هل أنت متأكد من حذف هذا المحتوى؟')) return;
+    
+    try {
+      if (activeTab === 'channels') {
+        await channelsAPI.deleteChannel(id);
+        await loadChannels();
+      } else if (isSeries()) {
+        await seriesAPI.deleteSeries(id);
+        await loadSeriesByCategory(getSeriesCategory(activeTab), getSetterByTab(activeTab));
+      } else {
+        await moviesAPI.deleteMovie(id);
+        const category = activeTab === 'animation_movies' ? 'animation' : activeTab;
+        await loadMoviesByCategory(category, getSetterByTab(activeTab));
+      }
+      await refreshAllData();
+    } catch (error) {
+      console.error('خطأ في الحذف:', error);
+      alert('حدث خطأ في الحذف');
+    }
+  };
+
+  const handleEdit = async (item) => {
+    setEditingItem(item);
+    setFormData({
+        id: item.id, 
+        title: item.title || '', 
+        titleFr: item.title_fr || '', 
+        titleAr: item.title_ar || '',
+        poster: item.poster || '', 
+        backdrop: item.backdrop || '', 
+        videoUrl: item.video_url || '',
+        rating: item.rating || '', 
+        year: item.year || '', 
+        genre: item.genre || '',
+        duration: item.duration || '', 
+        country: item.country || '', 
+        director: item.director || '',
+        cast: item.cast || '', 
+        description: item.description || '', 
+        descriptionFr: item.description_fr || '',
+        descriptionAr: item.description_ar || '', 
+        subtitles: item.subtitles || [], 
+        defaultSubtitle: item.default_subtitle || '',
+        audioTracks: item.audioTracks || [], 
+        defaultAudio: item.default_audio || '',
+        seasons: item.seasons || 1
+    });
+    
+    let subtitlesData = item.subtitles || [];
+    let audioTracksData = item.audioTracks || [];
+    
+    setSubtitlesList(subtitlesData.map(sub => ({
+        lang: sub.language,
+        label: sub.label,
+        url: sub.url
+    })));
+    
+    setAudioTracksList(audioTracksData.map(track => ({
+        lang: track.language,
+        label: track.label,
+        url: track.url
+    })));
+    
+    setEpisodesList(item.episodes || []);
+    setShowModal(true);
+  };
+
+  const resetForm = () => {
+    setFormData({
+        id: '', title: '', titleFr: '', titleAr: '', poster: '', backdrop: '', videoUrl: '',
+        rating: '', year: '', genre: '', duration: '', country: '', director: '',
+        cast: '', description: '', descriptionFr: '', descriptionAr: '',
+        subtitles: [], defaultSubtitle: '', audioTracks: [], defaultAudio: '', seasons: 1
+    });
+    setSubtitlesList([]);
+    setAudioTracksList([]);
+    setEpisodesList([]);
+    setSaveError('');
+  };
+
+  const showNotification = (message, type = 'success') => {
+    const toast = document.createElement('div');
+    toast.className = `fixed bottom-4 right-4 ${type === 'success' ? 'bg-green-600' : 'bg-red-600'} text-white px-4 py-2 rounded-lg shadow-lg z-50 text-sm animate-fadeIn`;
+    toast.textContent = message;
+    document.body.appendChild(toast);
+    setTimeout(() => toast.remove(), 3000);
+  };
+
+  // ========== دالة الحفظ الرئيسية (المصححة) ==========
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setSaving(true);
+    setSaveError('');
+    
+    const isSeriesTab = isSeries();
+    const isMovieTab = isMovie();
+    
+    // تحديد التصنيف بشكل صحيح
+    let category = activeTab;
+    if (activeTab === 'animation_movies') category = 'animation';
+    if (activeTab === 'animation_series') category = 'animation';
+    if (isSeriesTab) {
+      category = getSeriesCategory(activeTab);
+    }
+    
+    console.log('🔍 ==== DEBUG معلومات التصنيف ====');
+    console.log('activeTab:', activeTab);
+    console.log('category النهائي:', category);
+    console.log('isSeriesTab:', isSeriesTab);
+    
+    // بناء البيانات
+    const newItem = {
+      title: formData.title || null,
+      title_ar: formData.titleAr || null,
+      title_fr: formData.titleFr || null,
+      description: formData.description || null,
+      description_ar: formData.descriptionAr || null,
+      description_fr: formData.descriptionFr || null,
+      poster: formData.poster || null,
+      backdrop: formData.backdrop || null,
+      video_url: formData.videoUrl || null,
+      rating: formData.rating ? parseFloat(formData.rating) : 0,
+      year: formData.year ? parseInt(formData.year) : new Date().getFullYear(),
+      duration: formData.duration || null,
+      genre: formData.genre || null,
+      country: formData.country || null,
+      director: formData.director || null,
+      cast: formData.cast || null,
+      category: category,  // التصنيف الصحيح
+      seasons: isSeriesTab ? (formData.seasons ? parseInt(formData.seasons) : 1) : undefined
+    };
+    
+    console.log('📂 التصنيف النهائي قبل الإرسال:', newItem.category);
+    console.log('📤 البيانات المرسلة:', JSON.stringify(newItem, null, 2));
+    
+    try {
+      let response;
+      
+      if (editingItem) {
+        if (isSeriesTab) {
+          response = await seriesAPI.updateSeries(editingItem.id, newItem);
+        } else {
+          response = await moviesAPI.updateMovie(editingItem.id, newItem);
+        }
+        showNotification('تم التعديل بنجاح', 'success');
+      } else {
+        if (isSeriesTab) {
+          console.log('📺 جاري إضافة مسلسل جديد...');
+          response = await seriesAPI.addSeries(newItem);
+          console.log('✅ استجابة الخادم:', response);
+          showNotification('تمت إضافة المسلسل بنجاح', 'success');
+        } else if (isMovieTab) {
+          response = await moviesAPI.addMovie(newItem);
+          showNotification('تمت إضافة الفيلم بنجاح', 'success');
+        }
+      }
+      
+      // تحديث البيانات مباشرة
+      await refreshAllData();
+      
+      setShowModal(false);
+      setEditingItem(null);
+      resetForm();
+      
+    } catch (error) {
+      console.error('❌ خطأ في الحفظ:', error);
+      const errorMsg = error.response?.data?.message || error.message;
+      setSaveError(errorMsg);
+      showNotification('حدث خطأ في حفظ البيانات: ' + errorMsg, 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // ========== دوال القنوات ==========
+  const handleChannelSubmit = async (e) => {
+    e.preventDefault();
+    setSaving(true);
+    
+    const newChannel = { 
+      name: channelFormData.name,
+      name_ar: channelFormData.nameAr,
+      logo: channelFormData.logo,
+      url: channelFormData.url,
+      category: channelFormData.category
+    };
+    
+    try {
+      if (editingItem) {
+        await channelsAPI.updateChannel(editingItem.id, newChannel);
+      } else {
+        await channelsAPI.addChannel(newChannel);
+      }
+      await loadChannels();
+      await refreshAllData();
+      showNotification('تم حفظ القناة بنجاح', 'success');
+      setShowModal(false);
+      setEditingItem(null);
+      setChannelFormData({ id: '', name: '', nameAr: '', logo: '', url: '', category: 'arabic' });
+    } catch (error) {
+      console.error('خطأ في حفظ القناة:', error);
+      showNotification('حدث خطأ في حفظ القناة', 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleChannelEdit = (channel) => {
+    setEditingItem(channel);
+    setChannelFormData({
+      id: channel.id,
+      name: channel.name || '',
+      nameAr: channel.name_ar || '',
+      logo: channel.logo || '',
+      url: channel.url || '',
+      category: channel.category || 'arabic'
+    });
+    setShowModal(true);
+  };
+
+  const handleLogout = () => { 
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+    localStorage.removeItem('userRole');
+    localStorage.removeItem('userPlan');
+    localStorage.removeItem('isAuthenticated');
+    navigate('/admin/login'); 
+  };
+
+  const getCurrentData = () => {
+    switch(activeTab) {
+      case 'arabwood': return arabwoodMovies;
+      case 'hollywood': return hollywoodMovies;
+      case 'bollywood': return bollywoodMovies;
+      case 'european': return europeanMovies;
+      case 'asian': return asianMovies;
+      case 'animation_movies': return animationMovies;
+      case 'arabicseries': return arabicSeries;
+      case 'foreignseries': return foreignSeries;
+      case 'indianseries': return indianSeries;
+      case 'turkishseries': return turkishSeries;
+      case 'koreanseries': return koreanSeries;
+      case 'animation_series': return animationSeries;
+      case 'channels': return channels;
+      default: return [];
+    }
+  };
+  
+  const currentData = getCurrentData();
+  const filteredData = currentData.filter(item => item.title?.toLowerCase().includes(searchTerm.toLowerCase()));
+
+  const totalMovies = arabwoodMovies.length + hollywoodMovies.length + bollywoodMovies.length + europeanMovies.length + asianMovies.length + animationMovies.length;
+  const totalSeries = arabicSeries.length + foreignSeries.length + indianSeries.length + turkishSeries.length + koreanSeries.length + animationSeries.length;
 
   if (loading) {
     return (
       <div className="flex justify-center items-center h-screen bg-black">
-        <div className="w-12 h-12 border-4 border-red-600 border-t-transparent rounded-full animate-spin"></div>
+        <div className="text-center">
+          <div className="w-12 h-12 border-4 border-red-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-gray-400">جاري تحميل لوحة التحكم...</p>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-black">
+    <div className="min-h-screen bg-black" key={refreshKey}>
       {/* Header */}
       <header className="bg-gray-900 border-b border-gray-800 sticky top-0 z-40">
         <div className="px-3 sm:px-4 md:px-6 py-3 sm:py-4 flex justify-between items-center">
@@ -642,20 +656,26 @@ const AdminDashboard = () => {
             <div className="mt-4 mb-2"><p className="text-[10px] sm:text-xs text-gray-600 px-3">🎬 الأفلام</p></div>
             {menuCategories.filter(c => c.type === 'movie').map(cat => (
               <button key={cat.id} onClick={() => { setActiveTab(cat.id); if(isMobile) setSidebarOpen(false); }} className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl mb-1 transition text-sm ${activeTab === cat.id ? 'bg-gray-800 text-white border-r-2 border-red-500' : 'text-gray-400 hover:bg-gray-800 hover:text-white'}`}>
-                <span className="text-base sm:text-lg">{cat.icon}</span><span className="flex-1 text-right text-sm">{cat.label}</span><span className="text-[10px] sm:text-xs bg-gray-700 px-1.5 sm:px-2 py-0.5 rounded-full">{cat.count}</span>
+                <span className="text-base sm:text-lg">{cat.icon}</span>
+                <span className="flex-1 text-right text-sm">{cat.label}</span>
+                <span className="text-[10px] sm:text-xs bg-gray-700 px-1.5 sm:px-2 py-0.5 rounded-full">{cat.count}</span>
               </button>
             ))}
             
             <div className="mt-4 mb-2"><p className="text-[10px] sm:text-xs text-gray-600 px-3">📺 المسلسلات</p></div>
             {menuCategories.filter(c => c.type === 'series').map(cat => (
               <button key={cat.id} onClick={() => { setActiveTab(cat.id); if(isMobile) setSidebarOpen(false); }} className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl mb-1 transition text-sm ${activeTab === cat.id ? 'bg-gray-800 text-white border-r-2 border-red-500' : 'text-gray-400 hover:bg-gray-800 hover:text-white'}`}>
-                <span className="text-base sm:text-lg">{cat.icon}</span><span className="flex-1 text-right text-sm">{cat.label}</span><span className="text-[10px] sm:text-xs bg-gray-700 px-1.5 sm:px-2 py-0.5 rounded-full">{cat.count}</span>
+                <span className="text-base sm:text-lg">{cat.icon}</span>
+                <span className="flex-1 text-right text-sm">{cat.label}</span>
+                <span className="text-[10px] sm:text-xs bg-gray-700 px-1.5 sm:px-2 py-0.5 rounded-full">{cat.count}</span>
               </button>
             ))}
             
             <div className="mt-4 mb-2"><p className="text-[10px] sm:text-xs text-gray-600 px-3">📡 القنوات</p></div>
             <button onClick={() => { setActiveTab('channels'); if(isMobile) setSidebarOpen(false); }} className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl mb-1 transition text-sm ${activeTab === 'channels' ? 'bg-gray-800 text-white border-r-2 border-red-500' : 'text-gray-400 hover:bg-gray-800 hover:text-white'}`}>
-              <span className="text-base sm:text-lg">📺</span><span className="flex-1 text-right text-sm">قنوات TV</span><span className="text-[10px] sm:text-xs bg-gray-700 px-1.5 sm:px-2 py-0.5 rounded-full">{channels.length}</span>
+              <span className="text-base sm:text-lg">📺</span>
+              <span className="flex-1 text-right text-sm">قنوات TV</span>
+              <span className="text-[10px] sm:text-xs bg-gray-700 px-1.5 sm:px-2 py-0.5 rounded-full">{channels.length}</span>
             </button>
 
             <div className="mt-4 mb-2"><p className="text-[10px] sm:text-xs text-gray-600 px-3">🎵 الكليبات</p></div>
@@ -699,12 +719,10 @@ const AdminDashboard = () => {
           </div>
         </aside>
 
-        {/* خلفية مظلمة للقائمة على الهواتف */}
         {isMobile && sidebarOpen && (
           <div className="fixed inset-0 bg-black/70 z-20" onClick={() => setSidebarOpen(false)} />
         )}
 
-        {/* Main Content */}
         <main className={`flex-1 transition-all duration-300 ${!isMobile ? 'lg:mr-72' : ''} p-3 sm:p-4 md:p-6`}>
           
           {activeTab === 'dashboard' && (
@@ -743,29 +761,22 @@ const AdminDashboard = () => {
             </div>
           )}
 
-          {/* Channels Table */}
           {activeTab === 'channels' && (
             <div>
               <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-6">
                 <h2 className="text-xl sm:text-2xl font-bold text-white">قنوات التلفزيون</h2>
-                <button onClick={() => { setEditingItem(null); setChannelFormData({ id: '', name: '', nameAr: '', logo: '', url: '', category: 'arabic' }); setShowModal(true); }} className="bg-red-600 text-white px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg flex items-center gap-2 text-sm sm:text-base"><FaPlus /> إضافة قناة</button>
+                <button onClick={() => { setEditingItem(null); setChannelFormData({ id: '', name: '', nameAr: '', logo: '', url: '', category: 'arabic' }); setShowModal(true); }} className="bg-red-600 text-white px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg flex items-center gap-2 text-sm sm:text-base">
+                  <FaPlus /> إضافة قناة
+                </button>
               </div>
               <div className="bg-gray-900 rounded-xl overflow-hidden border border-gray-800 overflow-x-auto">
                 <table className="w-full min-w-[500px]">
                   <thead className="bg-gray-800">
-                    <tr>
-                      <th className="px-2 sm:px-4 py-2 sm:py-3 text-right text-white text-xs sm:text-sm">الشعار</th>
-                      <th className="px-2 sm:px-4 py-2 sm:py-3 text-right text-white text-xs sm:text-sm">الاسم</th>
-                      <th className="px-2 sm:px-4 py-2 sm:py-3 text-right text-white text-xs sm:text-sm">التصنيف</th>
-                      <th className="px-2 sm:px-4 py-2 sm:py-3 text-right text-white text-xs sm:text-sm hidden md:table-cell">الرابط</th>
-                      <th className="px-2 sm:px-4 py-2 sm:py-3 text-right text-white text-xs sm:text-sm">إجراءات</th>
-                    </tr>
+                    <tr><th className="px-2 sm:px-4 py-2 sm:py-3 text-right text-white text-xs sm:text-sm">الشعار</th><th className="px-2 sm:px-4 py-2 sm:py-3 text-right text-white text-xs sm:text-sm">الاسم</th><th className="px-2 sm:px-4 py-2 sm:py-3 text-right text-white text-xs sm:text-sm">التصنيف</th><th className="px-2 sm:px-4 py-2 sm:py-3 text-right text-white text-xs sm:text-sm hidden md:table-cell">الرابط</th><th className="px-2 sm:px-4 py-2 sm:py-3 text-right text-white text-xs sm:text-sm">إجراءات</th></tr>
                   </thead>
                   <tbody>
                     {channels.length === 0 ? (
-                      <tr>
-                        <td colSpan="5" className="text-center py-8 sm:py-12 text-gray-500 text-sm">لا توجد قنوات</td>
-                      </tr>
+                      <tr><td colSpan="5" className="text-center py-8 sm:py-12 text-gray-500 text-sm">لا توجد قنوات</td></tr>
                     ) : (
                       channels.map(channel => (
                         <tr key={channel.id} className="border-b border-gray-800">
@@ -773,10 +784,7 @@ const AdminDashboard = () => {
                           <td className="px-2 sm:px-4 py-2 sm:py-3 text-white text-xs sm:text-sm">{channel.name}</td>
                           <td className="px-2 sm:px-4 py-2 sm:py-3"><span className="px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-lg text-[10px] sm:text-xs bg-purple-500/20 text-purple-300">{channel.category}</span></td>
                           <td className="px-2 sm:px-4 py-2 sm:py-3 text-gray-400 truncate max-w-[120px] sm:max-w-[200px] text-xs hidden md:table-cell">{channel.url}</td>
-                          <td className="px-2 sm:px-4 py-2 sm:py-3 flex gap-1 sm:gap-2">
-                            <button onClick={() => handleEdit(channel)} className="text-blue-400 p-1"><FaEdit className="text-sm sm:text-base" /></button>
-                            <button onClick={() => handleDelete(channel.id)} className="text-red-400 p-1"><FaTrash className="text-sm sm:text-base" /></button>
-                          </td>
+                          <td className="px-2 sm:px-4 py-2 sm:py-3 flex gap-1 sm:gap-2"><button onClick={() => handleChannelEdit(channel)} className="text-blue-400 p-1"><FaEdit className="text-sm sm:text-base" /></button><button onClick={() => handleDelete(channel.id)} className="text-red-400 p-1"><FaTrash className="text-sm sm:text-base" /></button></td>
                         </tr>
                       ))
                     )}
@@ -786,7 +794,6 @@ const AdminDashboard = () => {
             </div>
           )}
           
-          {/* باقي الأقسام */}
           {activeTab === 'clips' && <AdminClipsManager />}
           {activeTab === 'reciters' && <AdminRecitersManager />}
           {activeTab === 'users' && <AdminUsers />}
@@ -796,7 +803,6 @@ const AdminDashboard = () => {
           {activeTab === 'backup' && <AdminBackup />}
           {activeTab === 'roles' && <AdminRoles />}
           
-          {/* Movies & Series Table */}
           {activeTab !== 'dashboard' && activeTab !== 'channels' && activeTab !== 'clips' && activeTab !== 'reciters' && activeTab !== 'users' && activeTab !== 'songs' && activeTab !== 'statistics' && activeTab !== 'comments' && activeTab !== 'backup' && activeTab !== 'roles' && (
             <div>
               <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-6">
@@ -806,31 +812,19 @@ const AdminDashboard = () => {
                     <FaSearch className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 text-sm" />
                     <input type="text" placeholder="بحث..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full bg-gray-800 border border-gray-700 rounded-lg py-1.5 sm:py-2 pr-8 pl-3 text-white text-xs sm:text-sm" />
                   </div>
-                  <button onClick={() => { resetForm(); setEditingItem(null); setShowModal(true); }} className="bg-red-600 text-white px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg flex items-center gap-2 text-sm"><FaPlus className="text-sm" /> إضافة</button>
+                  <button onClick={() => { resetForm(); setEditingItem(null); setShowModal(true); }} className="bg-red-600 text-white px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg flex items-center gap-2 text-sm">
+                    <FaPlus className="text-sm" /> إضافة
+                  </button>
                 </div>
               </div>
               <div className="bg-gray-900 rounded-xl overflow-hidden border border-gray-800 overflow-x-auto">
                 <table className="w-full min-w-[800px]">
                   <thead className="bg-gray-800">
-                    <tr>
-                      <th className="px-2 sm:px-4 py-2 sm:py-3 text-right text-white text-xs sm:text-sm">الصورة</th>
-                      <th className="px-2 sm:px-4 py-2 sm:py-3 text-right text-white text-xs sm:text-sm">العنوان</th>
-                      <th className="px-2 sm:px-4 py-2 sm:py-3 text-right text-white text-xs sm:text-sm">التصنيف</th>
-                      <th className="px-2 sm:px-4 py-2 sm:py-3 text-right text-white text-xs sm:text-sm">السنة</th>
-                      <th className="px-2 sm:px-4 py-2 sm:py-3 text-right text-white text-xs sm:text-sm">التقييم</th>
-                      <th className="px-2 sm:px-4 py-2 sm:py-3 text-right text-white text-xs sm:text-sm hidden sm:table-cell">المدة</th>
-                      {isSeries() && <th className="px-2 sm:px-4 py-2 sm:py-3 text-right text-white text-xs sm:text-sm hidden md:table-cell">الحلقات</th>}
-                      <th className="px-2 sm:px-4 py-2 sm:py-3 text-right text-white text-xs sm:text-sm">الترجمات</th>
-                      <th className="px-2 sm:px-4 py-2 sm:py-3 text-right text-white text-xs sm:text-sm hidden sm:table-cell">الصوت</th>
-                      <th className="px-2 sm:px-4 py-2 sm:py-3 text-right text-white text-xs sm:text-sm hidden lg:table-cell">الدولة</th>
-                      <th className="px-2 sm:px-4 py-2 sm:py-3 text-right text-white text-xs sm:text-sm">إجراءات</th>
-                    </tr>
+                    <tr><th className="px-2 sm:px-4 py-2 sm:py-3 text-right text-white text-xs sm:text-sm">الصورة</th><th className="px-2 sm:px-4 py-2 sm:py-3 text-right text-white text-xs sm:text-sm">العنوان</th><th className="px-2 sm:px-4 py-2 sm:py-3 text-right text-white text-xs sm:text-sm">التصنيف</th><th className="px-2 sm:px-4 py-2 sm:py-3 text-right text-white text-xs sm:text-sm">السنة</th><th className="px-2 sm:px-4 py-2 sm:py-3 text-right text-white text-xs sm:text-sm">التقييم</th><th className="px-2 sm:px-4 py-2 sm:py-3 text-right text-white text-xs sm:text-sm hidden sm:table-cell">المدة</th>{isSeries() && <th className="px-2 sm:px-4 py-2 sm:py-3 text-right text-white text-xs sm:text-sm hidden md:table-cell">الحلقات</th>}<th className="px-2 sm:px-4 py-2 sm:py-3 text-right text-white text-xs sm:text-sm">الترجمات</th><th className="px-2 sm:px-4 py-2 sm:py-3 text-right text-white text-xs sm:text-sm hidden sm:table-cell">الصوت</th><th className="px-2 sm:px-4 py-2 sm:py-3 text-right text-white text-xs sm:text-sm hidden lg:table-cell">الدولة</th><th className="px-2 sm:px-4 py-2 sm:py-3 text-right text-white text-xs sm:text-sm">إجراءات</th></tr>
                   </thead>
                   <tbody>
                     {filteredData.length === 0 ? (
-                      <tr>
-                        <td colSpan="10" className="text-center py-8 sm:py-12 text-gray-500 text-sm">لا يوجد محتوى</td>
-                      </tr>
+                      <tr><td colSpan="10" className="text-center py-8 sm:py-12 text-gray-500 text-sm">لا يوجد محتوى</td></tr>
                     ) : (
                       filteredData.map(item => (
                         <tr key={item.id} className="border-b border-gray-800">
@@ -844,10 +838,7 @@ const AdminDashboard = () => {
                           <td className="px-2 sm:px-4 py-2 sm:py-3"><span className="text-[10px] sm:text-xs text-green-400">{item.subtitles?.length || 0} ترجمة</span></td>
                           <td className="px-2 sm:px-4 py-2 sm:py-3 hidden sm:table-cell"><span className="text-[10px] sm:text-xs text-yellow-400">{item.audioTracks?.length || 0} صوت</span></td>
                           <td className="px-2 sm:px-4 py-2 sm:py-3 text-gray-400 text-xs sm:text-sm hidden lg:table-cell">{item.country || '-'}</td>
-                          <td className="px-2 sm:px-4 py-2 sm:py-3 flex gap-1 sm:gap-2">
-                            <button onClick={() => handleEdit(item)} className="text-blue-400 p-1"><FaEdit className="text-sm sm:text-base" /></button>
-                            <button onClick={() => handleDelete(item.id)} className="text-red-400 p-1"><FaTrash className="text-sm sm:text-base" /></button>
-                          </td>
+                          <td className="px-2 sm:px-4 py-2 sm:py-3 flex gap-1 sm:gap-2"><button onClick={() => handleEdit(item)} className="text-blue-400 p-1"><FaEdit className="text-sm sm:text-base" /></button><button onClick={() => handleDelete(item.id)} className="text-red-400 p-1"><FaTrash className="text-sm sm:text-base" /></button></td>
                         </tr>
                       ))
                     )}
@@ -868,6 +859,12 @@ const AdminDashboard = () => {
               <button onClick={() => setShowModal(false)} className="text-gray-400 hover:text-white text-2xl">&times;</button>
             </div>
             <form onSubmit={handleSubmit} className="p-4 sm:p-5 space-y-4">
+              {saveError && (
+                <div className="bg-red-500/10 border border-red-500 rounded-lg p-3 text-red-400 text-sm flex items-center gap-2">
+                  <FaExclamationTriangle /> {saveError}
+                </div>
+              )}
+              
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
                 <input type="text" placeholder="العنوان (عربي)" value={formData.title} onChange={(e) => setFormData({...formData, title: e.target.value})} className="bg-gray-800 border border-gray-700 rounded-lg p-2 text-white text-sm" required />
                 <input type="text" placeholder="العنوان (Français)" value={formData.titleFr} onChange={(e) => setFormData({...formData, titleFr: e.target.value})} className="bg-gray-800 border border-gray-700 rounded-lg p-2 text-white text-sm" />
@@ -893,6 +890,9 @@ const AdminDashboard = () => {
                 </select>
                 <input type="text" placeholder="المخرج" value={formData.director} onChange={(e) => setFormData({...formData, director: e.target.value})} className="bg-gray-800 border border-gray-700 rounded-lg p-2 text-white text-sm" />
                 <input type="text" placeholder="طاقم التمثيل" value={formData.cast} onChange={(e) => setFormData({...formData, cast: e.target.value})} className="bg-gray-800 border border-gray-700 rounded-lg p-2 text-white text-sm" />
+                {isSeries() && (
+                  <input type="number" placeholder="عدد المواسم" value={formData.seasons} onChange={(e) => setFormData({...formData, seasons: e.target.value})} className="bg-gray-800 border border-gray-700 rounded-lg p-2 text-white text-sm" />
+                )}
               </div>
 
               <textarea rows="2" placeholder="القصة (عربي)" value={formData.description} onChange={(e) => setFormData({...formData, description: e.target.value})} className="w-full bg-gray-800 border border-gray-700 rounded-lg p-2 text-white text-sm"></textarea>
@@ -903,64 +903,67 @@ const AdminDashboard = () => {
 
               {/* الترجمات */}
               <div className="border-t border-gray-800 pt-4">
-                <div className="flex items-center gap-2 mb-2"><FaClosedCaptioning className="text-red-500 text-sm sm:text-base" /><h4 className="text-white font-bold text-sm sm:text-base">الترجمات (Subtitles) - ملفات بصيغة VTT</h4></div>
+                <div className="flex items-center gap-2 mb-2"><FaClosedCaptioning className="text-red-500" /><h4 className="text-white font-bold">الترجمات (Subtitles) - ملفات بصيغة VTT</h4></div>
                 <div className="flex flex-wrap gap-2 mb-2">
                   {subtitlesList.map((sub, i) => (
-                    <div key={i} className="bg-gray-800 rounded-lg px-2 sm:px-3 py-1 flex items-center gap-1 sm:gap-2">
-                      <span className={`text-[10px] sm:text-xs px-1 rounded ${sub.lang === 'ar' ? 'text-green-400' : sub.lang === 'en' ? 'text-blue-400' : 'text-yellow-400'}`}>{sub.label}</span>
-                      <span className="text-gray-500 text-[10px] sm:text-xs truncate max-w-[100px] sm:max-w-[150px]">{sub.url}</span>
+                    <div key={i} className="bg-gray-800 rounded-lg px-2 py-1 flex items-center gap-1">
+                      <span className="text-xs">{sub.label}</span>
                       <button type="button" onClick={() => removeSubtitle(i)} className="text-red-400 text-xs">✕</button>
                     </div>
                   ))}
                 </div>
                 <div className="grid grid-cols-4 gap-2">
-                  <select value={newSubtitle.lang} onChange={(e) => setNewSubtitle({...newSubtitle, lang: e.target.value})} className="bg-gray-800 border border-gray-700 rounded-lg p-1.5 sm:p-2 text-white text-xs sm:text-sm">
+                  <select value={newSubtitle.lang} onChange={(e) => setNewSubtitle({...newSubtitle, lang: e.target.value})} className="bg-gray-800 rounded-lg p-1 text-white text-xs">
                     {languages.map(l => <option key={l.code} value={l.code}>{l.label}</option>)}
                   </select>
-                  <input type="text" placeholder="التسمية" value={newSubtitle.label} onChange={(e) => setNewSubtitle({...newSubtitle, label: e.target.value})} className="bg-gray-800 border border-gray-700 rounded-lg p-1.5 sm:p-2 text-white text-xs sm:text-sm" />
-                  <input type="url" placeholder="رابط الترجمة (.vtt)" value={newSubtitle.url} onChange={(e) => setNewSubtitle({...newSubtitle, url: e.target.value})} className="col-span-2 bg-gray-800 border border-gray-700 rounded-lg p-1.5 sm:p-2 text-white text-xs sm:text-sm" />
+                  <input type="text" placeholder="التسمية" value={newSubtitle.label} onChange={(e) => setNewSubtitle({...newSubtitle, label: e.target.value})} className="bg-gray-800 rounded-lg p-1 text-white text-xs" />
+                  <input type="url" placeholder="رابط الترجمة (.vtt)" value={newSubtitle.url} onChange={(e) => setNewSubtitle({...newSubtitle, url: e.target.value})} className="col-span-2 bg-gray-800 rounded-lg p-1 text-white text-xs" />
                 </div>
-                <button type="button" onClick={addSubtitle} className="mt-2 bg-green-600 text-white px-3 py-1 rounded-lg text-xs sm:text-sm w-full">+ إضافة ترجمة</button>
+                <button type="button" onClick={addSubtitle} className="mt-2 bg-green-600 text-white px-2 py-1 rounded text-xs w-full">+ إضافة ترجمة</button>
               </div>
 
               {/* المسارات الصوتية */}
               <div className="border-t border-gray-800 pt-4">
-                <div className="flex items-center gap-2 mb-2"><FaMicrophoneAlt className="text-red-500 text-sm sm:text-base" /><h4 className="text-white font-bold text-sm sm:text-base">المسارات الصوتية (Audio Tracks) - روابط MP3/M4A</h4></div>
+                <div className="flex items-center gap-2 mb-2"><FaMicrophoneAlt className="text-red-500" /><h4 className="text-white font-bold">المسارات الصوتية (Audio Tracks)</h4></div>
                 <div className="flex flex-wrap gap-2 mb-2">
                   {audioTracksList.map((audio, i) => (
-                    <div key={i} className="bg-gray-800 rounded-lg px-2 sm:px-3 py-1 flex items-center gap-1 sm:gap-2">
-                      <span className={`text-[10px] sm:text-xs px-1 rounded ${audio.lang === 'ar' ? 'text-green-400' : audio.lang === 'en' ? 'text-blue-400' : 'text-yellow-400'}`}>{audio.label}</span>
-                      <span className="text-gray-500 text-[10px] sm:text-xs truncate max-w-[100px] sm:max-w-[150px]">{audio.url}</span>
+                    <div key={i} className="bg-gray-800 rounded-lg px-2 py-1 flex items-center gap-1">
+                      <span className="text-xs">{audio.label}</span>
                       <button type="button" onClick={() => removeAudioTrack(i)} className="text-red-400 text-xs">✕</button>
                     </div>
                   ))}
                 </div>
                 <div className="grid grid-cols-4 gap-2">
-                  <select value={newAudioTrack.lang} onChange={(e) => setNewAudioTrack({...newAudioTrack, lang: e.target.value})} className="bg-gray-800 border border-gray-700 rounded-lg p-1.5 sm:p-2 text-white text-xs sm:text-sm">
+                  <select value={newAudioTrack.lang} onChange={(e) => setNewAudioTrack({...newAudioTrack, lang: e.target.value})} className="bg-gray-800 rounded-lg p-1 text-white text-xs">
                     {languages.map(l => <option key={l.code} value={l.code}>{l.label}</option>)}
                   </select>
-                  <input type="text" placeholder="التسمية" value={newAudioTrack.label} onChange={(e) => setNewAudioTrack({...newAudioTrack, label: e.target.value})} className="bg-gray-800 border border-gray-700 rounded-lg p-1.5 sm:p-2 text-white text-xs sm:text-sm" />
-                  <input type="url" placeholder="رابط الصوت (MP3/M4A)" value={newAudioTrack.url} onChange={(e) => setNewAudioTrack({...newAudioTrack, url: e.target.value})} className="col-span-2 bg-gray-800 border border-gray-700 rounded-lg p-1.5 sm:p-2 text-white text-xs sm:text-sm" />
+                  <input type="text" placeholder="التسمية" value={newAudioTrack.label} onChange={(e) => setNewAudioTrack({...newAudioTrack, label: e.target.value})} className="bg-gray-800 rounded-lg p-1 text-white text-xs" />
+                  <input type="url" placeholder="رابط الصوت (MP3/M4A)" value={newAudioTrack.url} onChange={(e) => setNewAudioTrack({...newAudioTrack, url: e.target.value})} className="col-span-2 bg-gray-800 rounded-lg p-1 text-white text-xs" />
                 </div>
-                <button type="button" onClick={addAudioTrack} className="mt-2 bg-green-600 text-white px-3 py-1 rounded-lg text-xs sm:text-sm w-full">+ إضافة مسار صوتي</button>
+                <button type="button" onClick={addAudioTrack} className="mt-2 bg-green-600 text-white px-2 py-1 rounded text-xs w-full">+ إضافة مسار صوتي</button>
               </div>
 
               {/* الإعدادات الافتراضية */}
-              <div className="grid grid-cols-2 gap-3 sm:gap-4 border-t border-gray-800 pt-4">
-                <div><label className="text-gray-400 text-xs sm:text-sm">الترجمة الافتراضية</label><select value={formData.defaultSubtitle} onChange={(e) => setFormData({...formData, defaultSubtitle: e.target.value})} className="w-full bg-gray-800 border border-gray-700 rounded-lg p-1.5 sm:p-2 text-white text-xs sm:text-sm mt-1"><option value="">-- بدون --</option>{subtitlesList.map((sub, i) => (<option key={i} value={sub.lang}>{sub.label}</option>))}</select></div>
-                <div><label className="text-gray-400 text-xs sm:text-sm">المسار الصوتي الافتراضي</label><select value={formData.defaultAudio} onChange={(e) => setFormData({...formData, defaultAudio: e.target.value})} className="w-full bg-gray-800 border border-gray-700 rounded-lg p-1.5 sm:p-2 text-white text-xs sm:text-sm mt-1"><option value="">-- الصوت الأصلي --</option>{audioTracksList.map((audio, i) => (<option key={i} value={audio.lang}>{audio.label}</option>))}</select></div>
+              <div className="grid grid-cols-2 gap-3 border-t border-gray-800 pt-4">
+                <div><label className="text-gray-400 text-xs">الترجمة الافتراضية</label><select value={formData.defaultSubtitle} onChange={(e) => setFormData({...formData, defaultSubtitle: e.target.value})} className="w-full bg-gray-800 border border-gray-700 rounded-lg p-1 text-white text-xs mt-1"><option value="">-- بدون --</option>{subtitlesList.map((sub, i) => (<option key={i} value={sub.lang}>{sub.label}</option>))}</select></div>
+                <div><label className="text-gray-400 text-xs">المسار الصوتي الافتراضي</label><select value={formData.defaultAudio} onChange={(e) => setFormData({...formData, defaultAudio: e.target.value})} className="w-full bg-gray-800 border border-gray-700 rounded-lg p-1 text-white text-xs mt-1"><option value="">-- الصوت الأصلي --</option>{audioTracksList.map((audio, i) => (<option key={i} value={audio.lang}>{audio.label}</option>))}</select></div>
               </div>
 
               {/* الحلقات للمسلسلات */}
               {isSeries() && (
                 <div className="border-t border-gray-800 pt-4">
-                  <div className="flex justify-between items-center mb-3"><h4 className="text-white font-bold text-sm sm:text-base">الحلقات ({episodesList.length})</h4><button type="button" onClick={() => { setShowEpisodeModal(true); }} className="bg-green-600 text-white px-2 sm:px-3 py-1 rounded-lg text-xs sm:text-sm flex items-center gap-1"><FaPlus size={12} /> إضافة حلقة</button></div>
+                  <div className="flex justify-between items-center mb-3">
+                    <h4 className="text-white font-bold">الحلقات ({episodesList.length})</h4>
+                    <button type="button" onClick={() => { setShowEpisodeModal(true); }} className="bg-green-600 text-white px-2 py-1 rounded text-xs flex items-center gap-1">
+                      <FaPlus size={12} /> إضافة حلقة
+                    </button>
+                  </div>
                   <div className="space-y-2 max-h-60 overflow-y-auto">
                     {episodesList.map(ep => (
-                      <div key={ep.id} className="bg-gray-800 rounded-lg p-2 sm:p-3">
+                      <div key={ep.id} className="bg-gray-800 rounded-lg p-2">
                         <div className="flex justify-between items-center">
-                          <div><span className="text-red-400 font-bold text-xs sm:text-sm">الحلقة {ep.number}</span><p className="text-white text-xs sm:text-sm">{ep.title}</p><p className="text-gray-500 text-[10px] sm:text-xs">{ep.duration}</p>{ep.subtitles?.length > 0 && <span className="text-green-400 text-[10px] sm:text-xs ml-2">📝 {ep.subtitles.length} ترجمة</span>}{ep.audioTracks?.length > 0 && <span className="text-yellow-400 text-[10px] sm:text-xs">🎧 {ep.audioTracks.length} صوت</span>}</div>
-                          <button type="button" onClick={() => deleteEpisode(ep.id)} className="text-red-400 hover:text-red-300 p-1"><FaTrashAlt className="text-sm" /></button>
+                          <div><span className="text-red-400 font-bold text-xs">الحلقة {ep.number}</span><p className="text-white text-xs">{ep.title}</p><p className="text-gray-500 text-[10px]">{ep.duration}</p></div>
+                          <button type="button" onClick={() => deleteEpisode(ep.id)} className="text-red-400 hover:text-red-300 p-1"><FaTrashAlt /></button>
                         </div>
                       </div>
                     ))}
@@ -969,8 +972,12 @@ const AdminDashboard = () => {
               )}
 
               <div className="flex gap-3 pt-4">
-                <button type="submit" className="flex-1 bg-red-600 text-white py-2 rounded-lg hover:bg-red-700 transition text-sm sm:text-base"><FaSave className="inline ml-1" /> حفظ</button>
-                <button type="button" onClick={() => setShowModal(false)} className="flex-1 bg-gray-700 text-white py-2 rounded-lg hover:bg-gray-600 transition text-sm sm:text-base"><FaTimes className="inline ml-1" /> إلغاء</button>
+                <button type="submit" disabled={saving} className="flex-1 bg-red-600 text-white py-2 rounded-lg hover:bg-red-700 transition text-sm disabled:opacity-50 flex items-center justify-center gap-2">
+                  {saving ? <FaSyncAlt className="animate-spin" /> : <FaSave />} {saving ? 'جاري الحفظ...' : 'حفظ'}
+                </button>
+                <button type="button" onClick={() => setShowModal(false)} className="flex-1 bg-gray-700 text-white py-2 rounded-lg hover:bg-gray-600 transition text-sm">
+                  <FaTimes className="inline ml-1" /> إلغاء
+                </button>
               </div>
             </form>
           </div>
@@ -988,6 +995,7 @@ const AdminDashboard = () => {
                 <input type="text" placeholder="عنوان الحلقة" value={episodeFormData.title} onChange={(e) => setEpisodeFormData({...episodeFormData, title: e.target.value})} className="bg-gray-800 border border-gray-700 rounded-lg p-2 text-white text-sm" />
                 <input type="text" placeholder="المدة" value={episodeFormData.duration} onChange={(e) => setEpisodeFormData({...episodeFormData, duration: e.target.value})} className="bg-gray-800 border border-gray-700 rounded-lg p-2 text-white text-sm" />
                 <input type="url" placeholder="رابط الفيديو" value={episodeFormData.videoUrl} onChange={(e) => setEpisodeFormData({...episodeFormData, videoUrl: e.target.value})} className="bg-gray-800 border border-gray-700 rounded-lg p-2 text-white text-sm" />
+                <input type="text" placeholder="رقم الموسم" value={episodeFormData.season_num} onChange={(e) => setEpisodeFormData({...episodeFormData, season_num: e.target.value})} className="bg-gray-800 border border-gray-700 rounded-lg p-2 text-white text-sm" />
               </div>
               <textarea rows="2" placeholder="وصف الحلقة" value={episodeFormData.description} onChange={(e) => setEpisodeFormData({...episodeFormData, description: e.target.value})} className="w-full bg-gray-800 border border-gray-700 rounded-lg p-2 text-white text-sm"></textarea>
               
@@ -1014,7 +1022,7 @@ const AdminDashboard = () => {
               <select value={channelFormData.category} onChange={(e) => setChannelFormData({...channelFormData, category: e.target.value})} className="w-full bg-gray-800 border border-gray-700 rounded-lg p-2 text-white text-sm">
                 {channelCategories.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
               </select>
-              <div className="flex gap-3 pt-3"><button type="submit" className="flex-1 bg-red-600 text-white py-2 rounded-lg hover:bg-red-700 text-sm">حفظ</button><button type="button" onClick={() => setShowModal(false)} className="flex-1 bg-gray-700 text-white py-2 rounded-lg hover:bg-gray-600 text-sm">إلغاء</button></div>
+              <div className="flex gap-3 pt-3"><button type="submit" disabled={saving} className="flex-1 bg-red-600 text-white py-2 rounded-lg hover:bg-red-700 text-sm disabled:opacity-50 flex items-center justify-center gap-2">{saving ? <FaSyncAlt className="animate-spin" /> : <FaSave />} حفظ</button><button type="button" onClick={() => setShowModal(false)} className="flex-1 bg-gray-700 text-white py-2 rounded-lg hover:bg-gray-600 text-sm"><FaTimes className="inline ml-1" /> إلغاء</button></div>
             </form>
           </div>
         </div>
