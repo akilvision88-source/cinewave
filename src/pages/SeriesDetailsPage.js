@@ -1,4 +1,4 @@
-// src/pages/SeriesDetailsPage.js - نسخة معدلة لاستخدام API
+// src/pages/SeriesDetailsPage.js - نسخة كاملة مع حفظ سجل المشاهدة
 import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useLanguage } from '../context/LanguageContext';
@@ -8,7 +8,7 @@ import {
   FaStar, FaPlus, FaShare, FaCalendarAlt, 
   FaClock, FaFilm, FaClosedCaptioning, 
   FaMicrophoneAlt, FaTv, FaChevronDown, FaChevronUp, FaArrowLeft, FaPlay,
-  FaList, FaStepForward
+  FaList, FaStepForward, FaCheckCircle
 } from 'react-icons/fa';
 
 const SeriesDetailsPage = () => {
@@ -22,6 +22,57 @@ const SeriesDetailsPage = () => {
   const [inWatchlist, setInWatchlist] = useState(false);
   const [showPlaylist, setShowPlaylist] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [showHistoryToast, setShowHistoryToast] = useState(false);
+
+  // دالة حفظ المسلسل في سجل المشاهدة
+  const saveSeriesToHistory = (seriesData, episodeData) => {
+    try {
+      console.log('💾 حفظ مسلسل في سجل المشاهدة:', seriesData.title, '- الحلقة:', episodeData.episode_num);
+      
+      let history = localStorage.getItem('cinewave_watch_history');
+      let historyArray = history ? JSON.parse(history) : [];
+      
+      const historyItem = {
+        id: seriesData.id,
+        type: seriesData.category === 'animation' ? 'animation' : 'series',
+        title: seriesData.title,
+        title_ar: seriesData.title_ar || seriesData.title,
+        poster: seriesData.poster,
+        year: seriesData.year,
+        rating: seriesData.rating,
+        genre: seriesData.genre,
+        season: episodeData.season_num,
+        episode: episodeData.episode_num,
+        episode_title: episodeData.title,
+        progress: 0,
+        watchedAt: new Date().toISOString()
+      };
+      
+      const existingIndex = historyArray.findIndex(item => item.id === seriesData.id && item.type === (seriesData.category === 'animation' ? 'animation' : 'series'));
+      if (existingIndex !== -1) {
+        historyArray.splice(existingIndex, 1);
+      }
+      
+      historyArray.unshift(historyItem);
+      localStorage.setItem('cinewave_watch_history', JSON.stringify(historyArray.slice(0, 100)));
+      
+      console.log('✅ تم حفظ المسلسل في السجل');
+      setShowHistoryToast(true);
+      setTimeout(() => setShowHistoryToast(false), 2000);
+      window.dispatchEvent(new Event('historyUpdated'));
+    } catch (error) {
+      console.error('خطأ في حفظ السجل:', error);
+    }
+  };
+
+  // دالة تشغيل الحلقة مع حفظ السجل
+  const handleWatchClick = (episode) => {
+    if (series) {
+      saveSeriesToHistory(series, episode);
+      setSelectedEpisode(episode);
+      setShowPlayer(true);
+    }
+  };
 
   const getCategoryIcon = (category) => {
     const icons = {
@@ -56,7 +107,6 @@ const SeriesDetailsPage = () => {
     }
   }, [id]);
 
-  // تحميل بيانات المسلسل من API
   useEffect(() => {
     const loadSeries = async () => {
       setLoading(true);
@@ -138,7 +188,9 @@ const SeriesDetailsPage = () => {
     if (!series?.episodes || !selectedEpisode) return false;
     const currentIndex = series.episodes.findIndex(ep => ep.id === selectedEpisode.id);
     if (currentIndex < series.episodes.length - 1) {
-      setSelectedEpisode(series.episodes[currentIndex + 1]);
+      const nextEpisode = series.episodes[currentIndex + 1];
+      saveSeriesToHistory(series, nextEpisode);
+      setSelectedEpisode(nextEpisode);
       return true;
     }
     return false;
@@ -148,7 +200,9 @@ const SeriesDetailsPage = () => {
     if (!series?.episodes || !selectedEpisode) return false;
     const currentIndex = series.episodes.findIndex(ep => ep.id === selectedEpisode.id);
     if (currentIndex > 0) {
-      setSelectedEpisode(series.episodes[currentIndex - 1]);
+      const prevEpisode = series.episodes[currentIndex - 1];
+      saveSeriesToHistory(series, prevEpisode);
+      setSelectedEpisode(prevEpisode);
       return true;
     }
     return false;
@@ -170,6 +224,7 @@ const SeriesDetailsPage = () => {
   const handlePlaylistItemClick = (item) => {
     const episode = series?.episodes.find(ep => ep.id === item.id);
     if (episode) {
+      saveSeriesToHistory(series, episode);
       setSelectedEpisode(episode);
       if (showPlayer) {
         setShowPlayer(false);
@@ -218,8 +273,14 @@ const SeriesDetailsPage = () => {
 
   return (
     <div className="min-h-screen bg-black">
-      {/* باقي الكود كما هو - نفس الـ JSX الذي كان موجوداً */}
-      {/* ... (نفس الـ JSX، فقط تأكد من أن props متوافقة) */}
+      {/* إشعار حفظ السجل */}
+      {showHistoryToast && (
+        <div className="fixed bottom-24 left-1/2 transform -translate-x-1/2 z-50 bg-green-600 text-white px-4 py-2 rounded-full shadow-lg text-sm flex items-center gap-2 animate-fadeIn">
+          <FaCheckCircle className="text-white" />
+          <span>تم إضافة المسلسل إلى سجل المشاهدة</span>
+        </div>
+      )}
+
       <div className={`relative h-[60vh] overflow-hidden ${isAnimation ? 'bg-gradient-to-r from-purple-900/50 to-blue-900/50' : ''}`}>
         <img src={series.backdrop || series.poster} alt={getTitle()} className="w-full h-full object-cover" />
         <div className="absolute inset-0 bg-gradient-to-t from-black via-black/50 to-transparent" />
@@ -250,7 +311,7 @@ const SeriesDetailsPage = () => {
             </div>
             <div className="flex gap-3 flex-wrap">
               {selectedEpisode && (
-                <button onClick={() => setShowPlayer(true)} className={`${isAnimation ? 'bg-purple-600 hover:bg-purple-700' : 'bg-red-600 hover:bg-red-700'} text-white px-6 py-2 rounded-lg flex items-center gap-2 transition`}>
+                <button onClick={() => handleWatchClick(selectedEpisode)} className={`${isAnimation ? 'bg-purple-600 hover:bg-purple-700' : 'bg-red-600 hover:bg-red-700'} text-white px-6 py-2 rounded-lg flex items-center gap-2 transition`}>
                   <FaPlay /> متابعة المشاهدة
                 </button>
               )}
@@ -302,7 +363,7 @@ const SeriesDetailsPage = () => {
                     {expandedSeason === seasonNum && (
                       <div className="space-y-2">
                         {seasons[seasonNum].sort((a, b) => a.episode_num - b.episode_num).map(episode => (
-                          <div key={episode.id} onClick={() => { setSelectedEpisode(episode); setShowPlayer(true); }} className={`flex items-center justify-between p-3 rounded-lg cursor-pointer transition ${selectedEpisode?.id === episode.id ? 'bg-red-600/20 border border-red-500' : 'bg-gray-800/50 hover:bg-gray-800'}`}>
+                          <div key={episode.id} className={`flex items-center justify-between p-3 rounded-lg cursor-pointer transition ${selectedEpisode?.id === episode.id ? 'bg-red-600/20 border border-red-500' : 'bg-gray-800/50 hover:bg-gray-800'}`}>
                             <div className="flex items-center gap-3">
                               <div className="w-10 h-10 bg-red-600/20 rounded-full flex items-center justify-center">
                                 <span className="text-red-400 font-bold">{episode.episode_num}</span>
@@ -314,7 +375,7 @@ const SeriesDetailsPage = () => {
                                 </div>
                               </div>
                             </div>
-                            <button className="w-8 h-8 rounded-full bg-red-600 flex items-center justify-center hover:bg-red-700 transition">
+                            <button onClick={() => handleWatchClick(episode)} className="w-8 h-8 rounded-full bg-red-600 flex items-center justify-center hover:bg-red-700 transition">
                               <FaPlay className="text-white text-sm" />
                             </button>
                           </div>
@@ -352,7 +413,7 @@ const SeriesDetailsPage = () => {
                 <h3 className="text-white font-bold mb-3">أحدث الحلقات</h3>
                 <div className="space-y-2">
                   {[...series.episodes].reverse().slice(0, 3).map(ep => (
-                    <div key={ep.id} onClick={() => { setSelectedEpisode(ep); setShowPlayer(true); }} className="flex items-center gap-2 p-2 bg-gray-800 rounded-lg cursor-pointer hover:bg-gray-700">
+                    <div key={ep.id} onClick={() => handleWatchClick(ep)} className="flex items-center gap-2 p-2 bg-gray-800 rounded-lg cursor-pointer hover:bg-gray-700">
                       <div className="w-8 h-8 bg-red-600/20 rounded-full flex items-center justify-center">
                         <span className="text-red-400 text-sm">{ep.episode_num}</span>
                       </div>
@@ -417,6 +478,16 @@ const SeriesDetailsPage = () => {
           </div>
         </div>
       )}
+
+      <style jsx>{`
+        @keyframes fadeIn {
+          from { opacity: 0; transform: translate(-50%, 20px); }
+          to { opacity: 1; transform: translate(-50%, 0); }
+        }
+        .animate-fadeIn {
+          animation: fadeIn 0.3s ease-out;
+        }
+      `}</style>
     </div>
   );
 };

@@ -1,4 +1,4 @@
-// src/pages/MovieDetailsPage.js - نسخة كاملة مع الترجمات والمسارات الصوتية
+// src/pages/MovieDetailsPage.js - نسخة كاملة مع حفظ سجل المشاهدة
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useLanguage } from '../context/LanguageContext';
@@ -7,7 +7,7 @@ import { moviesAPI, subtitlesAPI, audioTracksAPI } from '../services/api';
 import { 
   FaStar, FaPlus, FaShare, FaCalendarAlt, 
   FaClock, FaFilm, FaArrowLeft, FaPlay, FaMicrophoneAlt, FaClosedCaptioning,
-  FaLanguage, FaHeadphones
+  FaLanguage, FaHeadphones, FaCheckCircle
 } from 'react-icons/fa';
 
 const MovieDetailsPage = () => {
@@ -21,6 +21,71 @@ const MovieDetailsPage = () => {
   const [subtitles, setSubtitles] = useState([]);
   const [audioTracks, setAudioTracks] = useState([]);
   const [showLanguages, setShowLanguages] = useState(false);
+  const [showHistoryToast, setShowHistoryToast] = useState(false);
+
+  // دالة حفظ الفيلم في سجل المشاهدة
+  const saveToWatchHistory = (movieData) => {
+    try {
+      console.log('💾 حفظ فيلم في سجل المشاهدة:', movieData.title);
+      
+      // جلب السجل الحالي
+      let history = localStorage.getItem('cinewave_watch_history');
+      let historyArray = history ? JSON.parse(history) : [];
+      
+      // إنشاء عنصر السجل
+      const historyItem = {
+        id: movieData.id,
+        type: 'movie',
+        title: movieData.title,
+        title_ar: movieData.title_ar || movieData.title,
+        poster: movieData.poster,
+        year: movieData.year,
+        rating: movieData.rating,
+        duration: movieData.duration,
+        genre: movieData.genre,
+        description: movieData.description || movieData.description_ar,
+        progress: 0,
+        watchedAt: new Date().toISOString()
+      };
+      
+      // إزالة أي عنصر مكرر
+      const existingIndex = historyArray.findIndex(item => item.id === movieData.id && item.type === 'movie');
+      if (existingIndex !== -1) {
+        historyArray.splice(existingIndex, 1);
+      }
+      
+      // إضافة في البداية
+      historyArray.unshift(historyItem);
+      
+      // الاحتفاظ بآخر 100 عنصر
+      const trimmedHistory = historyArray.slice(0, 100);
+      localStorage.setItem('cinewave_watch_history', JSON.stringify(trimmedHistory));
+      
+      console.log('✅ تم حفظ الفيلم في السجل:', movieData.title);
+      console.log('📋 عدد العناصر في السجل:', trimmedHistory.length);
+      
+      // إظهار إشعار
+      setShowHistoryToast(true);
+      setTimeout(() => setShowHistoryToast(false), 2000);
+      
+      // إرسال حدث للتحديث
+      window.dispatchEvent(new Event('historyUpdated'));
+      window.dispatchEvent(new Event('storage'));
+      
+      return true;
+    } catch (error) {
+      console.error('❌ خطأ في حفظ سجل المشاهدة:', error);
+      return false;
+    }
+  };
+
+  // دالة تشغيل الفيلم مع حفظ السجل
+  const handleWatchClick = () => {
+    if (movie) {
+      saveToWatchHistory(movie);
+      setShowPlayer(true);
+    }
+  };
 
   // التحقق من حالة تسجيل الدخول
   useEffect(() => {
@@ -204,6 +269,14 @@ const MovieDetailsPage = () => {
 
   return (
     <div className="min-h-screen bg-black">
+      {/* إشعار حفظ السجل */}
+      {showHistoryToast && (
+        <div className="fixed bottom-24 left-1/2 transform -translate-x-1/2 z-50 bg-green-600 text-white px-4 py-2 rounded-full shadow-lg text-sm flex items-center gap-2 animate-fadeIn">
+          <FaCheckCircle className="text-white" />
+          <span>تم إضافة الفيلم إلى سجل المشاهدة</span>
+        </div>
+      )}
+
       {showPlayer ? (
         <div className="fixed inset-0 bg-black z-50">
           <div className="relative h-full">
@@ -271,8 +344,9 @@ const MovieDetailsPage = () => {
                   </span>
                 </div>
                 <div className="flex flex-wrap gap-2 sm:gap-3">
+                  {/* زر المشاهدة المعدل */}
                   <button 
-                    onClick={() => setShowPlayer(true)} 
+                    onClick={handleWatchClick} 
                     className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 sm:px-6 sm:py-2 rounded-lg flex items-center gap-2 transition text-sm sm:text-base"
                   >
                     <FaPlay className="text-sm sm:text-base" /> {t('movie.watch')}
@@ -297,7 +371,7 @@ const MovieDetailsPage = () => {
             </div>
           </div>
 
-          {/* Details Section */}
+          {/* باقي الكود كما هو - Details Section, etc. */}
           <div className="w-full px-3 sm:px-4 md:px-6 lg:px-8 py-6 sm:py-8">
             <div className="grid md:grid-cols-3 gap-6 sm:gap-8">
               <div className="md:col-span-2 space-y-4 sm:space-y-6">
@@ -320,7 +394,6 @@ const MovieDetailsPage = () => {
                   </div>
                 </div>
 
-                {/* Languages and Subtitles Section */}
                 {(subtitles.length > 0 || audioTracks.length > 0) && (
                   <div className="bg-gray-900/50 rounded-xl p-4 sm:p-6">
                     <h2 className="text-white text-lg sm:text-xl font-bold mb-2 sm:mb-3 flex items-center gap-2">
@@ -435,6 +508,16 @@ const MovieDetailsPage = () => {
           </div>
         </div>
       )}
+
+      <style jsx>{`
+        @keyframes fadeIn {
+          from { opacity: 0; transform: translate(-50%, 20px); }
+          to { opacity: 1; transform: translate(-50%, 0); }
+        }
+        .animate-fadeIn {
+          animation: fadeIn 0.3s ease-out;
+        }
+      `}</style>
     </div>
   );
 };
