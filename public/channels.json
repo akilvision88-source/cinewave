@@ -1,0 +1,182 @@
+[
+  {
+    "id": 1,
+    "name": "Al Jazeera",
+    "nameAr": "الجزيرة",
+    "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/4/47/Al_Jazeera_English_2022.svg/1200px-Al_Jazeera_English_2022.svg.png",
+    "url": "https://live-hls.web-radio-cdn.net/ajm/hls/stream.m3u8",
+    "category": "arabic",
+    "type": "news"
+  },
+  {
+    "id": 2,
+    "name": "MBC1",
+    "nameAr": "MBC1",
+    "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/7/7e/MBC1_Logo.svg/1200px-MBC1_Logo.svg.png",
+    "url": "https://mbc1.akamaized.net/hls/live/2040081/mbc1/source_30f.m3u8",
+    "category": "arabic",
+    "type": "entertainment"
+  },
+  {
+    "id": 3,
+    "name": "BeIN Sports",
+    "nameAr": "بي إن سبورت",
+    "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/2/2b/BeIN_Sports_logo.svg/1200px-BeIN_Sports_logo.svg.png",
+    "url": "https://beinsports-hls.akamaized.net/hls/live/2002025/beinsports/index.m3u8",
+    "category": "sports",
+    "type": "sports"
+  },
+  {
+    "id": 4,
+    "name": "CNN",
+    "nameAr": "سي إن إن",
+    "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/b/b1/CNN_International_logo.svg/1200px-CNN_International_logo.svg.png",
+    "url": "https://cnn.com/hls/live.m3u8",
+    "category": "foreign",
+    "type": "news"
+  },
+  {
+    "id": 5,
+    "name": "BBC Arabic",
+    "nameAr": "بي بي سي العربية",
+    "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/2/2a/BBC_Arabic_2022.svg/1200px-BBC_Arabic_2022.svg.png",
+    "url": "https://bbc-hls.akamaized.net/hls/live/2002025/bbc/index.m3u8",
+    "category": "arabic",
+    "type": "news"
+  },
+  {
+    "id": 6,
+    "name": "Rotana Cinema",
+    "nameAr": "روتانا سينما",
+    "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/2/2a/Rotana_logo.svg/1200px-Rotana_logo.svg.png",
+    "url": "https://rotana-hls.akamaized.net/hls/live/2002025/rotana/index.m3u8",
+    "category": "movies",
+    "type": "movies"
+  },
+  {
+    "id": 7,
+    "name": "Spacetoon",
+    "nameAr": "سبيس تون",
+    "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/3/3a/Spacetoon_logo.svg/1200px-Spacetoon_logo.svg.png",
+    "url": "https://spacetoon-hls.akamaized.net/hls/live/2002025/spacetoon/index.m3u8",
+    "category": "kids",
+    "type": "kids"
+  },
+  {
+    "id": 8,
+    "name": "IQRAA",
+    "nameAr": "اقرأ",
+    "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/0/0a/Iqraa_logo.svg/1200px-Iqraa_logo.svg.png",
+    "url": "https://iqraa-hls.akamaized.net/hls/live/2002025/iqraa/index.m3u8",
+    "category": "religious",
+    "type": "religious"
+  },
+  {
+    "id": 9,
+    "name": "Rotana Music",
+    "nameAr": "روتانا موسيقى",
+    "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/2/2a/Rotana_logo.svg/1200px-Rotana_logo.svg.png",
+    "url": "https://rotana-music-hls.akamaized.net/hls/live/2002025/rotana-music/index.m3u8",
+    "category": "music",
+    "type": "music"
+  },
+  {
+    "id": 10,
+    "name": "Sky News",
+    "nameAr": "سكاي نيوز",
+    "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/8/8d/Sky_News_Logo.svg/1200px-Sky_News_Logo.svg.png",
+    "url": "https://skynews-hls.akamaized.net/hls/live/2002025/skynews/index.m3u8",
+    "category": "foreign",
+    "type": "news"
+  },
+  {
+    "id": 11,
+    "name": "Al Arabiya",
+    "nameAr": "العربية",
+    "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/0/0f/Al_Arabiya_Logo.svg/1200px-Al_Arabiya_Logo.svg.png",
+    "url": "https://alarabiya-hls.akamaized.net/hls/live/2002025/alarabiya/index.m3u8",
+    "category": "arabic",
+    "type": "news"
+  },
+  {
+    "id": 12,
+    "name": "MBC Action",
+    "nameAr": "MBC أكشن",
+    "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/0/0f/MBC_Action_logo.png/1200px-MBC_Action_logo.png",
+    "url": "https://mbcaction-hls.akamaized.net/hls/live/2002025/mbcaction/index.m3u8",
+    "category": "movies",
+    "type": "movies"
+  },
+  {
+    "id": 13,
+    "name": "Cartoon Network",
+    "nameAr": "كارتون نتورك",
+    "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/8/80/Cartoon_Network_2010_logo.svg/1200px-Cartoon_Network_2010_logo.svg.png",
+    "url": "https://cartoonnetwork-hls.akamaized.net/hls/live/2002025/cartoonnetwork/index.m3u8",
+    "category": "kids",
+    "type": "kids"
+  },
+  {
+    "id": 14,
+    "name": "Euronews",
+    "nameAr": "يورونيوز",
+    "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/1/1d/Euronews_logo_2016.svg/1200px-Euronews_logo_2016.svg.png",
+    "url": "https://euronews-hls.akamaized.net/hls/live/2002025/euronews/index.m3u8",
+    "category": "foreign",
+    "type": "news"
+  },
+  {
+    "id": 15,
+    "name": "Fox News",
+    "nameAr": "فوكس نيوز",
+    "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/6/67/Fox_News_Channel_logo.svg/1200px-Fox_News_Channel_logo.svg.png",
+    "url": "https://foxnews-hls.akamaized.net/hls/live/2002025/foxnews/index.m3u8",
+    "category": "foreign",
+    "type": "news"
+  },
+  {
+    "id": 16,
+    "name": "MTV Lebanon",
+    "nameAr": "MTV لبنان",
+    "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/2/2d/MTV_Lebanon_logo.png/1200px-MTV_Lebanon_logo.png",
+    "url": "https://mtvlebanon-hls.akamaized.net/hls/live/2002025/mtv/index.m3u8",
+    "category": "arabic",
+    "type": "entertainment"
+  },
+  {
+    "id": 17,
+    "name": "Dubai TV",
+    "nameAr": "دبي TV",
+    "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/6/6b/Dubai_TV_logo.png/1200px-Dubai_TV_logo.png",
+    "url": "https://dubaitv-hls.akamaized.net/hls/live/2002025/dubaitv/index.m3u8",
+    "category": "arabic",
+    "type": "entertainment"
+  },
+  {
+    "id": 18,
+    "name": "MBC Drama",
+    "nameAr": "MBC دراما",
+    "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/4/4f/MBC_Drama_logo.png/1200px-MBC_Drama_logo.png",
+    "url": "https://mbcdrama-hls.akamaized.net/hls/live/2002025/mbcdrama/index.m3u8",
+    "category": "arabic",
+    "type": "entertainment"
+  },
+  {
+    "id": 19,
+    "name": "Rotana Clip",
+    "nameAr": "روتانا كليب",
+    "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/2/2a/Rotana_logo.svg/1200px-Rotana_logo.svg.png",
+    "url": "https://rotana-clip-hls.akamaized.net/hls/live/2002025/rotana-clip/index.m3u8",
+    "category": "music",
+    "type": "music"
+  },
+  {
+    "id": 20,
+    "name": "National Geographic",
+    "nameAr": "ناشيونال جيوغرافيك",
+    "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/f/fc/National_Geographic_Channel_logo.svg/1200px-National_Geographic_Channel_logo.svg.png",
+    "url": "https://natgeo-hls.akamaized.net/hls/live/2002025/natgeo/index.m3u8",
+    "category": "foreign",
+    "type": "documentary"
+  }
+]

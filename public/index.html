@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="fr" dir="ltr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=yes, viewport-fit=cover" />
+  <meta name="theme-color" content="#000000" />
+  <meta name="description" content="CineWave - Plateforme de streaming de films et séries en illimité. Regardez les meilleurs films et séries en streaming." />
+  <meta name="keywords" content="streaming, films, séries, cinewave, regarder films, regarder séries, VOD, plateforme streaming" />
+  <meta name="author" content="CineWave" />
+  <meta name="robots" content="index, follow" />
+  
+  <!-- Open Graph / Facebook -->
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="CineWave | Films et Séries en streaming" />
+  <meta property="og:description" content="Plateforme de streaming de films et séries en illimité" />
+  <meta property="og:site_name" content="CineWave" />
+  
+  <!-- Twitter -->
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="CineWave | Films et Séries en streaming" />
+  <meta name="twitter:description" content="Plateforme de streaming de films et séries en illimité" />
+  
+  <!-- Apple Touch Icon -->
+  <link rel="apple-touch-icon" href="%PUBLIC_URL%/logo192.png" />
+  
+  <!-- Favicon -->
+  <link rel="icon" href="%PUBLIC_URL%/favicon.ico" />
+  <link rel="manifest" href="%PUBLIC_URL%/manifest.json" />
+  
+  <!-- Google Fonts -->
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700&family=Tajawal:wght@400;500;700&family=Changa:wght@400;500;600&family=Almarai:wght@400;700&display=swap" rel="stylesheet" />
+  
+  <!-- Preload critical assets -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  
+  <title>CineWave | Films et Séries en streaming</title>
+  
+  <style>
+    /* تحسين أولي لمنع闪现 */
+    body {
+      margin: 0;
+      padding: 0;
+      background-color: #0f0f0f;
+      font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+    
+    /* تحسين للغة العربية */
+    html[dir="rtl"] body {
+      font-family: 'Cairo', 'Tajawal', 'Almarai', system-ui, sans-serif;
+    }
+    
+    /* منع ظهور المحتوى بدون تنسيق */
+    #root {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+  </style>
+</head>
+<body class="bg-black">
+  <noscript>
+    <div style="display: flex; justify-content: center; align-items: center; height: 100vh; background-color: #0f0f0f; color: white; text-align: center; padding: 20px; flex-direction: column;">
+      <h1 style="color: #e50914;">CineWave</h1>
+      <p>Pour utiliser cette application, vous devez activer JavaScript.</p>
+      <p>Veuillez activer JavaScript dans les paramètres de votre navigateur.</p>
+    </div>
+  </noscript>
+  <div id="root"></div>
+</body>
+</html>
