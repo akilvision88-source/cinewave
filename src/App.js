@@ -20,6 +20,7 @@ import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
 import SubscriptionPlansPage from './pages/SubscriptionPlansPage';
 import PlaylistManager from './components/PlaylistManager';
+import HistoryPage from './pages/HistoryPage';
 
 // صفحات الأفلام
 import ArabwoodMovies from './pages/movies/ArabwoodMovies';
@@ -121,6 +122,7 @@ function App() {
             <Route path="/register" element={<RegisterPage />} />
             <Route path="/subscription-plans" element={<SubscriptionPlansPage />} />
             <Route path="/playlists" element={<PlaylistManager />} />
+            <Route path="/history" element={<HistoryPage />} />
             
             {/* صفحات تصنيفات الأفلام */}
             <Route path="/movies/arabwood" element={<ArabwoodMovies />} />
