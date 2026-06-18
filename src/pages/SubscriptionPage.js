@@ -1,266 +1,419 @@
-import React, { useState, useContext } from 'react';
-import { AuthContext } from '../App';
-import { FaCheckCircle, FaStar, FaPaypal, FaCreditCard, FaApplePay, FaGooglePay, FaLock, FaGift } from 'react-icons/fa';
-import StripePayment from '../components/Payment/StripePayment';
-import PayPalPayment from '../components/Payment/PayPalPayment';
+// src/pages/SubscriptionPage.js
+import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { 
+  FaCheck, FaStar, FaCrown, FaGem, FaRocket, FaShieldAlt,
+  FaVideo, FaMusic, FaTv, FaDownload, FaAd, FaHeadset,
+  FaArrowLeft, FaHeart, FaPlay, FaFilm, FaUsers
+} from 'react-icons/fa';
+import { subscriptionAPI } from '../services/api';
+import { useAuth } from '../context/AuthContext';
 
 const SubscriptionPage = () => {
-  const { isSubscribed, setIsSubscribed, user } = useContext(AuthContext);
+  const navigate = useNavigate();
+  const { user } = useAuth();
+  const [plans, setPlans] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [selectedPlan, setSelectedPlan] = useState(null);
-  const [paymentMethod, setPaymentMethod] = useState(null);
-  const [showPayment, setShowPayment] = useState(false);
-  const [couponCode, setCouponCode] = useState('');
-  const [discount, setDiscount] = useState(0);
-  const [showCouponInput, setShowCouponInput] = useState(false);
+  const [processing, setProcessing] = useState(false);
+  const [error, setError] = useState(null);
+  const [currentPlan, setCurrentPlan] = useState(null);
 
-  const plans = [
-    { 
-      id: 'monthly',
-      name: 'شهري', 
-      nameEn: 'Monthly',
-      price: 29, 
-      priceId: 'price_monthly',
-      duration: 'شهر واحد',
-      features: [
-        'مشاهدة جميع الأفلام والمسلسلات', 
-        'إعادة كاملة', 
-        'جودة 4K', 
-        'ملخصات حصرية',
-        'دعم فني 24/7'
-      ] 
-    },
-    { 
-      id: 'yearly',
-      name: 'سنوي', 
-      nameEn: 'Yearly',
-      price: 199, 
-      priceId: 'price_yearly',
-      duration: '12 شهراً',
-      features: [
-        'خصم 45%', 
-        'تحميل المباريات', 
-        'أولوية الدعم', 
-        'بدون إعلانات',
-        'مشاهدة على 4 أجهزة',
-        'محتوى حصري إضافي',
-        'هدية شهر مجاني'
-      ], 
-      popular: true 
-    },
-    { 
-      id: 'lifetime',
-      name: 'مدى الحياة', 
-      nameEn: 'Lifetime',
-      price: 499, 
-      priceId: 'price_lifetime',
-      duration: 'مدى الحياة',
-      features: [
-        'خصم 70%', 
-        'تحميل غير محدود', 
-        'دعم VIP', 
-        'بدون إعلانات',
-        'مشاهدة على 10 أجهزة',
-        'محتوى حصري',
-        'تحديثات مجانية مدى الحياة'
-      ] 
-    },
-  ];
+  // ========== LOAD PLANS ==========
+  useEffect(() => {
+    loadPlans();
+    loadCurrentPlan();
+  }, []);
 
-  const paymentMethods = [
-    { id: 'stripe', name: 'بطاقة ائتمان', icon: FaCreditCard, color: 'from-blue-600 to-blue-500' },
-    { id: 'paypal', name: 'PayPal', icon: FaPaypal, color: 'from-blue-700 to-blue-600' },
-  ];
-
-  const handleApplyCoupon = () => {
-    if (couponCode === 'WELCOME50') {
-      setDiscount(50);
-      alert('تم تطبيق خصم 50%!');
-    } else if (couponCode === 'SAVE20') {
-      setDiscount(20);
-      alert('تم تطبيق خصم 20%!');
-    } else {
-      alert('كود الخصم غير صالح');
+  const loadPlans = async () => {
+    setLoading(true);
+    try {
+      const data = await subscriptionAPI.getPlans();
+      setPlans(data);
+      console.log('✅ تم تحميل خطط الاشتراك:', data);
+    } catch (error) {
+      console.error('❌ خطأ في تحميل الخطط:', error);
+      setError(error.message || 'فشل في تحميل خطط الاشتراك');
+      // بيانات تجريبية في حالة فشل الاتصال
+      setPlans([
+        {
+          id: 1,
+          name: 'مجاني',
+          name_ar: 'مجاني',
+          price: 0,
+          currency: 'USD',
+          duration: 'life',
+          features: [
+            'مشاهدة الأفلام بجودة 480p',
+            'مشاهدة المسلسلات بجودة 480p',
+            'الإعلانات',
+            'دعم محدود'
+          ],
+          is_active: true
+        },
+        {
+          id: 2,
+          name: 'ستاندرد',
+          name_ar: 'ستاندرد',
+          price: 9.99,
+          currency: 'USD',
+          duration: 'month',
+          features: [
+            'مشاهدة الأفلام بجودة 1080p',
+            'مشاهدة المسلسلات بجودة 1080p',
+            'بدون إعلانات',
+            'تحميل للمشاهدة بدون إنترنت',
+            'دعم 24/7'
+          ],
+          is_active: true
+        },
+        {
+          id: 3,
+          name: 'بريميوم',
+          name_ar: 'بريميوم',
+          price: 19.99,
+          currency: 'USD',
+          duration: 'month',
+          features: [
+            'مشاهدة الأفلام بجودة 4K',
+            'مشاهدة المسلسلات بجودة 4K',
+            'بدون إعلانات',
+            'تحميل غير محدود',
+            'دعم 24/7',
+            'محتوى حصري',
+            'مشاهدة مبكرة للأفلام'
+          ],
+          is_active: true
+        }
+      ]);
+    } finally {
+      setLoading(false);
     }
   };
 
-  const getFinalPrice = (price) => {
-    return price - (price * discount / 100);
+  const loadCurrentPlan = async () => {
+    try {
+      const data = await subscriptionAPI.getCurrentPlan();
+      setCurrentPlan(data);
+      console.log('✅ الخطة الحالية:', data);
+    } catch (error) {
+      console.error('❌ خطأ في تحميل الخطة الحالية:', error);
+    }
   };
 
-  const handlePaymentSuccess = (paymentData) => {
-    console.log('Payment successful:', paymentData);
-    setIsSubscribed(true);
-    setShowPayment(false);
-    alert('✅ تم تفعيل اشتراكك بنجاح! شكراً لثقتك بنا.');
+  // ========== SUBSCRIBE ==========
+  const handleSubscribe = async (planId) => {
+    setProcessing(true);
+    setError(null);
+    try {
+      const result = await subscriptionAPI.subscribe(planId);
+      console.log('✅ تم الاشتراك بنجاح:', result);
+      
+      // تحديث حالة المستخدم
+      if (result.user) {
+        localStorage.setItem('user', JSON.stringify(result.user));
+        localStorage.setItem('userPlan', result.user.plan);
+      }
+      
+      alert('🎉 تم الاشتراك بنجاح!');
+      await loadCurrentPlan();
+      navigate('/');
+    } catch (error) {
+      console.error('❌ خطأ في الاشتراك:', error);
+      setError(error.message || 'فشل في عملية الاشتراك');
+    } finally {
+      setProcessing(false);
+    }
   };
 
-  const handlePaymentError = (error) => {
-    console.error('Payment error:', error);
-    alert('❌ حدث خطأ في عملية الدفع. يرجى المحاولة مرة أخرى.');
+  // ========== CANCEL SUBSCRIPTION ==========
+  const handleCancelSubscription = async () => {
+    if (!window.confirm('هل أنت متأكد من إلغاء الاشتراك؟')) return;
+    
+    setProcessing(true);
+    try {
+      await subscriptionAPI.cancelSubscription();
+      alert('✅ تم إلغاء الاشتراك بنجاح');
+      await loadCurrentPlan();
+      await loadPlans();
+    } catch (error) {
+      console.error('❌ خطأ في إلغاء الاشتراك:', error);
+      alert('❌ حدث خطأ في إلغاء الاشتراك');
+    } finally {
+      setProcessing(false);
+    }
   };
 
-  if (isSubscribed) {
+  // ========== GET PLAN ICON ==========
+  const getPlanIcon = (planName) => {
+    const name = planName?.toLowerCase() || '';
+    if (name.includes('بريميوم') || name.includes('premium')) return <FaCrown className="text-yellow-400 text-4xl" />;
+    if (name.includes('ستاندرد') || name.includes('standard')) return <FaGem className="text-blue-400 text-4xl" />;
+    return <FaStar className="text-gray-400 text-4xl" />;
+  };
+
+  // ========== GET PLAN COLOR ==========
+  const getPlanColor = (planName) => {
+    const name = planName?.toLowerCase() || '';
+    if (name.includes('بريميوم') || name.includes('premium')) return 'from-yellow-600 to-orange-600';
+    if (name.includes('ستاندرد') || name.includes('standard')) return 'from-blue-600 to-purple-600';
+    return 'from-gray-600 to-gray-700';
+  };
+
+  // ========== GET PLAN BADGE ==========
+  const getPlanBadge = (planName) => {
+    const name = planName?.toLowerCase() || '';
+    if (name.includes('بريميوم') || name.includes('premium')) return '🌟 الأكثر شعبية';
+    if (name.includes('ستاندرد') || name.includes('standard')) return '⭐ الأفضل قيمة';
+    return '';
+  };
+
+  // ========== FORMAT PRICE ==========
+  const formatPrice = (price, currency) => {
+    const symbol = currency === 'USD' ? '$' : 
+                   currency === 'EUR' ? '€' : 
+                   currency === 'MAD' ? 'DH' : '$';
+    return `${symbol}${price}`;
+  };
+
+  // ========== GET PLAN DURATION ==========
+  const getPlanDuration = (duration) => {
+    switch(duration) {
+      case 'month': return '/شهر';
+      case 'year': return '/سنة';
+      case 'life': return 'مدى الحياة';
+      default: return '';
+    }
+  };
+
+  // ========== CHECK IF CURRENT PLAN ==========
+  const isCurrentPlan = (planId) => {
+    if (!currentPlan) return false;
+    return currentPlan.plan_id === planId || currentPlan.id === planId;
+  };
+
+  // ========== CHECK IF USER CAN UPGRADE ==========
+  const canUpgrade = (planId) => {
+    if (!currentPlan) return true;
+    if (currentPlan.plan_id === planId || currentPlan.id === planId) return false;
+    // إذا كانت الخطة الحالية أعلى من الخطة المختارة
+    const currentIndex = plans.findIndex(p => p.id === currentPlan.plan_id || p.id === currentPlan.id);
+    const selectedIndex = plans.findIndex(p => p.id === planId);
+    return selectedIndex > currentIndex;
+  };
+
+  if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-gray-950 to-black flex items-center justify-center">
-        <div className="text-center bg-gray-900/50 backdrop-blur-sm rounded-2xl p-8 border border-green-500/30 max-w-md">
-          <div className="w-20 h-20 mx-auto bg-green-500/20 rounded-full flex items-center justify-center mb-4">
-            <FaCheckCircle className="text-green-500 text-4xl" />
-          </div>
-          <h1 className="text-2xl font-bold text-white mb-2">أنت مشترك بالفعل! 🎉</h1>
-          <p className="text-gray-400 mb-6">استمتع بمشاهدة جميع المحتويات الحصرية</p>
-          <Link to="/" className="bg-gradient-to-r from-purple-600 to-purple-500 text-white px-6 py-2 rounded-lg inline-block">
-            العودة للمشاهدة
-          </Link>
-        </div>
-      </div>
-    );
-  }
-
-  if (showPayment && selectedPlan && paymentMethod) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-gray-950 to-black py-12 px-4">
-        <div className="max-w-md mx-auto">
-          <button 
-            onClick={() => setShowPayment(false)}
-            className="text-gray-400 hover:text-white mb-4 flex items-center gap-2"
-          >
-            ← العودة للباقات
-          </button>
-          
-          <div className="bg-gray-900/50 backdrop-blur-sm rounded-2xl p-6 border border-gray-800">
-            <div className="text-center mb-6">
-              <h2 className="text-2xl font-bold text-white">إتمام الدفع</h2>
-              <p className="text-gray-400">{selectedPlan.name} - {selectedPlan.duration}</p>
-              <div className="mt-2 text-3xl font-bold text-purple-400">
-                {getFinalPrice(selectedPlan.price)} {selectedPlan.price === 499 ? '$' : '₪'}
-                {discount > 0 && (
-                  <span className="text-sm text-gray-500 line-through mr-2">${selectedPlan.price}</span>
-                )}
-              </div>
-            </div>
-
-            {paymentMethod.id === 'stripe' ? (
-              <StripePayment
-                amount={getFinalPrice(selectedPlan.price)}
-                currency="USD"
-                onSuccess={handlePaymentSuccess}
-                onError={handlePaymentError}
-              />
-            ) : (
-              <PayPalPayment
-                amount={getFinalPrice(selectedPlan.price)}
-                currency="USD"
-                onSuccess={handlePaymentSuccess}
-                onError={handlePaymentError}
-              />
-            )}
-          </div>
+      <div className="min-h-screen bg-black flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-12 h-12 border-4 border-purple-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-gray-400">جاري تحميل خطط الاشتراك...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-950 to-black">
-      {/* Hero Section */}
-      <div className="relative h-[40vh] overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-r from-purple-900/30 to-black" />
-        <div className="absolute inset-0 bg-[url('https://images.unsplash.com/photo-1536440136628-849c177e76a1?w=1920&h=400&fit=crop')] bg-cover bg-center opacity-20" />
-        <div className="relative h-full container-custom flex flex-col justify-center">
-          <h1 className="text-4xl md:text-6xl font-bold text-white mb-4">
-            اختر <span className="bg-gradient-to-r from-purple-400 to-purple-600 bg-clip-text text-transparent">باقة الاشتراك</span>
+    <div className="min-h-screen bg-gradient-to-b from-gray-900 to-black py-8 px-4">
+      <div className="max-w-7xl mx-auto">
+        {/* ====== HEADER ====== */}
+        <div className="flex items-center gap-3 mb-8">
+          <button onClick={() => navigate(-1)} className="text-gray-400 hover:text-white transition">
+            <FaArrowLeft className="text-xl" />
+          </button>
+          <h1 className="text-2xl sm:text-3xl font-bold text-white flex items-center gap-2">
+            <FaCrown className="text-yellow-400" />
+            خطط الاشتراك المميزة
           </h1>
-          <p className="text-gray-300 text-lg max-w-2xl">
-            احصل على تجربة مشاهدة فائقة مع ميزات حصرية وباقات تناسب احتياجاتك
-          </p>
-          <div className="flex items-center gap-2 mt-4">
-            <FaGift className="text-yellow-500" />
-            <span className="text-yellow-500">7 أيام تجريبية مجانية على جميع الباقات!</span>
+        </div>
+
+        {/* ====== ERROR ====== */}
+        {error && (
+          <div className="bg-red-500/20 border border-red-500 rounded-xl p-4 mb-6 text-center">
+            <p className="text-red-400">{error}</p>
+            <button onClick={loadPlans} className="mt-2 text-white bg-red-600 px-4 py-1 rounded-lg text-sm hover:bg-red-700">
+              إعادة المحاولة
+            </button>
           </div>
-        </div>
-      </div>
+        )}
 
-      {/* Plans */}
-      <div className="container-custom py-12">
-        <div className="grid md:grid-cols-3 gap-6">
-          {plans.map((plan) => (
-            <div key={plan.id} className={`bg-gray-900/50 backdrop-blur-sm rounded-2xl p-6 border transition-all duration-300 hover:-translate-y-2 ${
-              plan.popular ? 'border-purple-500 shadow-xl shadow-purple-500/20' : 'border-gray-800'
-            }`}>
-              {plan.popular && (
-                <div className="absolute -top-3 left-1/2 transform -translate-x-1/2 bg-gradient-to-r from-purple-600 to-purple-500 text-white px-4 py-1 rounded-full text-sm flex items-center gap-1">
-                  <FaStar className="text-sm" /> الأكثر طلباً
-                </div>
-              )}
-              
-              <h2 className="text-2xl font-bold text-white mb-2">{plan.name}</h2>
-              <p className="text-gray-400 text-sm mb-4">{plan.duration}</p>
-              <div className="mb-4">
-                <span className="text-4xl font-bold text-white">${getFinalPrice(plan.price)}</span>
-                {plan.id !== 'lifetime' && <span className="text-gray-400">/{plan.id === 'monthly' ? 'شهر' : 'سنة'}</span>}
+        {/* ====== CURRENT PLAN ====== */}
+        {currentPlan && (
+          <div className="bg-gray-800/50 border border-purple-500/30 rounded-xl p-4 mb-8">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+              <div>
+                <p className="text-gray-400 text-sm">📌 خطتك الحالية</p>
+                <p className="text-white font-bold text-lg">{currentPlan.plan_name || currentPlan.name}</p>
+                <p className="text-gray-400 text-sm">
+                  {currentPlan.plan_duration || currentPlan.duration} • 
+                  {currentPlan.status === 'active' ? ' ✅ نشطة' : ' ⏸️ غير نشطة'}
+                </p>
               </div>
-              
-              <ul className="space-y-3 mb-6">
-                {plan.features.map((feat, i) => (
-                  <li key={i} className="flex items-center gap-2 text-gray-300">
-                    <FaCheckCircle className="text-purple-500 text-sm" />
-                    <span>{feat}</span>
-                  </li>
-                ))}
-              </ul>
-              
-              <button
-                onClick={() => {
-                  setSelectedPlan(plan);
-                  setShowCouponInput(false);
-                }}
-                className="w-full bg-gradient-to-r from-purple-600 to-purple-500 text-white py-3 rounded-xl font-semibold hover:shadow-lg transition"
-              >
-                اختر الباقة
-              </button>
-            </div>
-          ))}
-        </div>
-
-        {/* اختيار طريقة الدفع بعد اختيار الباقة */}
-        {selectedPlan && !showPayment && (
-          <div className="mt-12 max-w-2xl mx-auto">
-            <div className="bg-gray-900/50 backdrop-blur-sm rounded-2xl p-6 border border-gray-800">
-              <h3 className="text-white text-xl font-bold mb-4">اختر طريقة الدفع</h3>
-              
-              {/* كود الخصم */}
-              <div className="mb-6">
-                <button onClick={() => setShowCouponInput(!showCouponInput)} className="text-purple-400 text-sm hover:text-purple-300">
-                  {showCouponInput ? 'إخفاء' : 'لديك كود خصم؟'}
-                </button>
-                {showCouponInput && (
-                  <div className="flex gap-2 mt-2">
-                    <input type="text" placeholder="أدخل كود الخصم" value={couponCode} onChange={(e) => setCouponCode(e.target.value)} className="flex-1 bg-gray-800 border border-gray-700 rounded-lg p-2 text-white" />
-                    <button onClick={handleApplyCoupon} className="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700">تطبيق</button>
-                  </div>
-                )}
-              </div>
-
-              {/* طرق الدفع */}
-              <div className="grid grid-cols-2 gap-4">
-                {paymentMethods.map((method) => (
-                  <button
-                    key={method.id}
-                    onClick={() => { setPaymentMethod(method); setShowPayment(true); }}
-                    className={`flex items-center justify-center gap-3 p-4 rounded-xl border-2 transition-all ${paymentMethod?.id === method.id ? 'border-purple-500 bg-purple-500/10' : 'border-gray-700 hover:border-purple-500/50'}`}
+              <div className="flex gap-3">
+                {currentPlan.status === 'active' && (
+                  <button 
+                    onClick={handleCancelSubscription}
+                    disabled={processing}
+                    className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition text-sm disabled:opacity-50"
                   >
-                    <method.icon className="text-2xl text-purple-400" />
-                    <span className="text-white">{method.name}</span>
+                    إلغاء الاشتراك
                   </button>
-                ))}
-              </div>
-
-              <div className="mt-4 text-center text-gray-500 text-xs flex items-center justify-center gap-2">
-                <FaLock className="text-xs" /> مدفوعات آمنة 100% مشفرة
+                )}
+                <button 
+                  onClick={loadPlans}
+                  className="px-4 py-2 bg-gray-700 text-white rounded-lg hover:bg-gray-600 transition text-sm"
+                >
+                  تحديث
+                </button>
               </div>
             </div>
           </div>
         )}
+
+        {/* ====== PLANS ====== */}
+        <div className="grid md:grid-cols-3 gap-6">
+          {plans.filter(plan => plan.is_active !== false).map((plan) => {
+            const isCurrent = isCurrentPlan(plan.id);
+            const badge = getPlanBadge(plan.name);
+            const canUpgradePlan = canUpgrade(plan.id);
+
+            return (
+              <div 
+                key={plan.id} 
+                className={`relative bg-gray-800 rounded-2xl overflow-hidden border transition-all duration-300 ${
+                  isCurrent ? 'border-purple-500 shadow-lg shadow-purple-500/20' : 'border-gray-700 hover:border-purple-500/50'
+                }`}
+              >
+                {/* Badge */}
+                {badge && (
+                  <div className="absolute top-4 right-4 bg-gradient-to-r from-yellow-500 to-orange-500 text-white text-xs font-bold px-3 py-1 rounded-full">
+                    {badge}
+                  </div>
+                )}
+
+                {/* Header */}
+                <div className={`p-6 bg-gradient-to-r ${getPlanColor(plan.name)}`}>
+                  <div className="flex items-center gap-3">
+                    {getPlanIcon(plan.name)}
+                    <div>
+                      <h3 className="text-white text-xl font-bold">
+                        {plan.name_ar || plan.name}
+                      </h3>
+                      <p className="text-white/70 text-sm">{plan.name}</p>
+                    </div>
+                  </div>
+                  <div className="mt-4">
+                    <span className="text-white text-3xl font-bold">
+                      {formatPrice(plan.price, plan.currency)}
+                    </span>
+                    <span className="text-white/70 text-sm">
+                      {getPlanDuration(plan.duration)}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Features */}
+                <div className="p-6">
+                  <ul className="space-y-3">
+                    {plan.features && plan.features.map((feature, index) => (
+                      <li key={index} className="flex items-center gap-3 text-gray-300 text-sm">
+                        <FaCheck className="text-green-400 flex-shrink-0" />
+                        {feature}
+                      </li>
+                    ))}
+                  </ul>
+
+                  {/* Button */}
+                  <div className="mt-6">
+                    {isCurrent ? (
+                      <div className="w-full bg-purple-600/20 text-purple-400 py-3 rounded-xl text-center font-medium border border-purple-500/30">
+                        ✅ خطتك الحالية
+                      </div>
+                    ) : canUpgradePlan ? (
+                      <button
+                        onClick={() => handleSubscribe(plan.id)}
+                        disabled={processing}
+                        className="w-full bg-purple-600 text-white py-3 rounded-xl hover:bg-purple-700 transition font-medium disabled:opacity-50"
+                      >
+                        {processing ? 'جاري الاشتراك...' : 'الاشتراك الآن'}
+                      </button>
+                    ) : (
+                      <div className="w-full bg-gray-700/50 text-gray-400 py-3 rounded-xl text-center font-medium border border-gray-600">
+                        {currentPlan ? 'خطتك الحالية أفضل' : 'غير متاح'}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* ====== FEATURES COMPARISON ====== */}
+        <div className="mt-12 bg-gray-800/50 rounded-2xl p-6 border border-gray-700">
+          <h2 className="text-white text-xl font-bold mb-6 text-center flex items-center justify-center gap-2">
+            <FaShieldAlt className="text-purple-400" />
+            مقارنة المميزات
+          </h2>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[600px]">
+              <thead>
+                <tr className="border-b border-gray-700">
+                  <th className="text-right text-gray-400 text-sm py-3 px-4">الميزة</th>
+                  {plans.filter(p => p.is_active !== false).map(plan => (
+                    <th key={plan.id} className="text-center text-white text-sm py-3 px-4">{plan.name_ar || plan.name}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {[
+                  { key: 'quality', label: 'جودة المشاهدة' },
+                  { key: 'ads', label: 'إعلانات' },
+                  { key: 'download', label: 'تحميل للمشاهدة' },
+                  { key: 'support', label: 'الدعم الفني' },
+                  { key: 'exclusive', label: 'محتوى حصري' },
+                ].map((item, index) => (
+                  <tr key={index} className="border-b border-gray-700/50">
+                    <td className="text-gray-300 text-sm py-3 px-4">{item.label}</td>
+                    {plans.filter(p => p.is_active !== false).map(plan => {
+                      const features = plan.features || [];
+                      let value = '❌';
+                      if (item.key === 'quality') {
+                        if (plan.name?.toLowerCase().includes('premium') || plan.name_ar?.includes('بريميوم')) value = '4K';
+                        else if (plan.name?.toLowerCase().includes('standard') || plan.name_ar?.includes('ستاندرد')) value = '1080p';
+                        else value = '480p';
+                      } else if (item.key === 'ads') {
+                        value = features.some(f => f.includes('بدون إعلانات')) ? '✅ بدون' : '⚠️ مع إعلانات';
+                      } else if (item.key === 'download') {
+                        value = features.some(f => f.includes('تحميل')) ? '✅' : '❌';
+                      } else if (item.key === 'support') {
+                        value = features.some(f => f.includes('دعم')) ? '✅ 24/7' : '⚠️ محدود';
+                      } else if (item.key === 'exclusive') {
+                        value = features.some(f => f.includes('حصري') || f.includes('مبكرة')) ? '✅' : '❌';
+                      }
+                      return (
+                        <td key={plan.id} className={`text-center text-sm py-3 px-4 ${
+                          value.includes('✅') || value.includes('4K') || value.includes('1080p') 
+                            ? 'text-green-400' 
+                            : value.includes('⚠️') ? 'text-yellow-400' : 'text-gray-500'
+                        }`}>
+                          {value}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* ====== FAQ ====== */}
+        <div className="mt-8 text-center">
+          <p className="text-gray-400 text-sm">
+            لديك أسئلة؟ تواصل معنا على <a href="mailto:support@akiltv.com" className="text-purple-400 hover:text-purple-300">support@akiltv.com</a>
+          </p>
+        </div>
       </div>
     </div>
   );

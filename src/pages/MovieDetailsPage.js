@@ -1,9 +1,9 @@
-// src/pages/MovieDetailsPage.js - نسخة كاملة مع حفظ سجل المشاهدة
+// src/pages/MovieDetailsPage.js - نسخة كاملة مع الاتصال بقاعدة البيانات
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useLanguage } from '../context/LanguageContext';
 import AdvancedHTML5Player from '../components/AdvancedHTML5Player';
-import { moviesAPI, subtitlesAPI, audioTracksAPI } from '../services/api';
+import { moviesAPI, subtitlesAPI, audioTracksAPI, watchlistAPI } from '../services/api';
 import { 
   FaStar, FaPlus, FaShare, FaCalendarAlt, 
   FaClock, FaFilm, FaArrowLeft, FaPlay, FaMicrophoneAlt, FaClosedCaptioning,
@@ -22,17 +22,27 @@ const MovieDetailsPage = () => {
   const [audioTracks, setAudioTracks] = useState([]);
   const [showLanguages, setShowLanguages] = useState(false);
   const [showHistoryToast, setShowHistoryToast] = useState(false);
+  const [isToggling, setIsToggling] = useState(false);
 
-  // دالة حفظ الفيلم في سجل المشاهدة
+  // ========== دالة عرض الإشعار ==========
+  const showToast = (message, type = 'success') => {
+    const toast = document.createElement('div');
+    toast.className = `fixed bottom-24 left-1/2 transform -translate-x-1/2 z-50 text-white px-4 py-2 rounded-full shadow-lg text-sm flex items-center gap-2 animate-fadeIn ${
+      type === 'success' ? 'bg-green-600' : 'bg-red-600'
+    }`;
+    toast.textContent = message;
+    document.body.appendChild(toast);
+    setTimeout(() => toast.remove(), 2500);
+  };
+
+  // ========== حفظ الفيلم في سجل المشاهدة (LocalStorage) ==========
   const saveToWatchHistory = (movieData) => {
     try {
       console.log('💾 حفظ فيلم في سجل المشاهدة:', movieData.title);
       
-      // جلب السجل الحالي
       let history = localStorage.getItem('cinewave_watch_history');
       let historyArray = history ? JSON.parse(history) : [];
       
-      // إنشاء عنصر السجل
       const historyItem = {
         id: movieData.id,
         type: 'movie',
@@ -48,27 +58,19 @@ const MovieDetailsPage = () => {
         watchedAt: new Date().toISOString()
       };
       
-      // إزالة أي عنصر مكرر
       const existingIndex = historyArray.findIndex(item => item.id === movieData.id && item.type === 'movie');
       if (existingIndex !== -1) {
         historyArray.splice(existingIndex, 1);
       }
       
-      // إضافة في البداية
       historyArray.unshift(historyItem);
-      
-      // الاحتفاظ بآخر 100 عنصر
       const trimmedHistory = historyArray.slice(0, 100);
       localStorage.setItem('cinewave_watch_history', JSON.stringify(trimmedHistory));
       
       console.log('✅ تم حفظ الفيلم في السجل:', movieData.title);
-      console.log('📋 عدد العناصر في السجل:', trimmedHistory.length);
       
-      // إظهار إشعار
       setShowHistoryToast(true);
       setTimeout(() => setShowHistoryToast(false), 2000);
-      
-      // إرسال حدث للتحديث
       window.dispatchEvent(new Event('historyUpdated'));
       window.dispatchEvent(new Event('storage'));
       
@@ -79,7 +81,7 @@ const MovieDetailsPage = () => {
     }
   };
 
-  // دالة تشغيل الفيلم مع حفظ السجل
+  // ========== تشغيل الفيلم مع حفظ السجل ==========
   const handleWatchClick = () => {
     if (movie) {
       saveToWatchHistory(movie);
@@ -87,32 +89,73 @@ const MovieDetailsPage = () => {
     }
   };
 
-  // التحقق من حالة تسجيل الدخول
+  // ========== التحقق من حالة تسجيل الدخول ==========
   useEffect(() => {
+    const token = localStorage.getItem('token');
     const user = localStorage.getItem('user');
-    setIsAuthenticated(!!user);
-    
-    if (user) {
-      const userData = JSON.parse(user);
-      setInWatchlist(userData.watchlist?.includes(parseInt(id)) || false);
-    }
-  }, [id]);
+    setIsAuthenticated(!!token || !!user);
+  }, []);
 
-  // تحميل بيانات الفيلم والترجمات والمسارات الصوتية
+  // ========== التحقق من وجود الفيلم في قائمة المشاهدة (من قاعدة البيانات) ==========
+  useEffect(() => {
+    const checkWatchlistStatus = async () => {
+      if (isAuthenticated && id) {
+        try {
+          console.log('🔍 التحقق من وجود الفيلم في قائمة المشاهدة:', id);
+          const result = await watchlistAPI.isInWatchlist(parseInt(id), 'movie');
+          setInWatchlist(result.exists);
+          console.log('✅ حالة الفيلم في القائمة:', result.exists);
+        } catch (error) {
+          console.error('❌ خطأ في التحقق من قائمة المشاهدة:', error);
+        }
+      }
+    };
+    checkWatchlistStatus();
+  }, [isAuthenticated, id]);
+
+  // ========== إضافة/إزالة من قائمة المشاهدة (باستخدام API) ==========
+  const toggleWatchlist = async () => {
+    if (!isAuthenticated) {
+      window.location.href = '/login';
+      return;
+    }
+    
+    if (isToggling) return;
+    setIsToggling(true);
+    
+    try {
+      if (inWatchlist) {
+        // إزالة من القائمة
+        await watchlistAPI.removeFromWatchlist(parseInt(id), 'movie');
+        setInWatchlist(false);
+        showToast('✅ تمت إزالة الفيلم من قائمة المشاهدة');
+      } else {
+        // إضافة إلى القائمة
+        await watchlistAPI.addToWatchlist(parseInt(id), 'movie');
+        setInWatchlist(true);
+        showToast('✅ تمت إضافة الفيلم إلى قائمة المشاهدة');
+      }
+    } catch (error) {
+      console.error('❌ خطأ في تحديث قائمة المشاهدة:', error);
+      showToast('❌ حدث خطأ، يرجى المحاولة مرة أخرى', 'error');
+    } finally {
+      setIsToggling(false);
+    }
+  };
+
+  // ========== تحميل بيانات الفيلم ==========
   useEffect(() => {
     const loadMovie = async () => {
       setLoading(true);
       try {
         console.log('🔍 جاري البحث عن الفيلم بالمعرف:', id);
         
-        // جلب الفيلم من API
-        let movieData = await moviesAPI.getById(id);
+        const movieData = await moviesAPI.getById(id);
         
         if (movieData && movieData.id) {
           console.log('✅ تم العثور على الفيلم:', movieData.title);
           setMovie(movieData);
           
-          // جلب الترجمات والمسارات الصوتية بشكل منفصل
           const [subtitlesData, audioTracksData] = await Promise.all([
             subtitlesAPI.getByMovie(id),
             audioTracksAPI.getByMovie(id)
@@ -136,39 +179,7 @@ const MovieDetailsPage = () => {
     }
   }, [id]);
 
-  // إضافة/إزالة من قائمة المشاهدة
-  const toggleWatchlist = () => {
-    if (!isAuthenticated) {
-      window.location.href = '/login';
-      return;
-    }
-    
-    const watchlist = JSON.parse(localStorage.getItem('watchlist') || '[]');
-    let newWatchlist;
-    
-    if (inWatchlist) {
-      newWatchlist = watchlist.filter(item => item !== parseInt(id));
-      setInWatchlist(false);
-    } else {
-      newWatchlist = [...watchlist, parseInt(id)];
-      setInWatchlist(true);
-    }
-    
-    localStorage.setItem('watchlist', JSON.stringify(newWatchlist));
-    
-    // تحديث user object
-    const user = JSON.parse(localStorage.getItem('user') || '{}');
-    user.watchlist = newWatchlist;
-    localStorage.setItem('user', JSON.stringify(user));
-    
-    const message = inWatchlist ? 'تمت إزالة الفيلم من قائمة المشاهدة' : 'تمت إضافة الفيلم إلى قائمة المشاهدة';
-    const toast = document.createElement('div');
-    toast.className = 'fixed bottom-24 left-1/2 transform -translate-x-1/2 bg-gray-800 text-white px-4 py-2 rounded-lg shadow-lg z-50 text-sm animate-fadeIn';
-    toast.textContent = message;
-    document.body.appendChild(toast);
-    setTimeout(() => toast.remove(), 2000);
-  };
-
+  // ========== دوال المساعدة ==========
   const getTitle = () => {
     if (!movie) return '';
     if (language === 'ar') return movie.title_ar || movie.title;
@@ -219,7 +230,6 @@ const MovieDetailsPage = () => {
     return defaultTrack ? defaultTrack.language : audioTracks[0]?.language || '';
   };
 
-  // تنسيق الترجمات للمشغل
   const formatSubtitlesForPlayer = () => {
     return subtitles.map(sub => ({
       lang: sub.language,
@@ -229,7 +239,6 @@ const MovieDetailsPage = () => {
     }));
   };
 
-  // تنسيق المسارات الصوتية للمشغل
   const formatAudioTracksForPlayer = () => {
     return audioTracks.map(track => ({
       lang: track.language,
@@ -239,6 +248,7 @@ const MovieDetailsPage = () => {
     }));
   };
 
+  // ========== LOADING ==========
   if (loading) {
     return (
       <div className="flex justify-center items-center h-screen bg-black">
@@ -250,6 +260,7 @@ const MovieDetailsPage = () => {
     );
   }
   
+  // ========== NOT FOUND ==========
   if (!movie) {
     return (
       <div className="flex justify-center items-center h-screen bg-black">
@@ -267,6 +278,7 @@ const MovieDetailsPage = () => {
     );
   }
 
+  // ========== RENDER ==========
   return (
     <div className="min-h-screen bg-black">
       {/* إشعار حفظ السجل */}
@@ -277,6 +289,7 @@ const MovieDetailsPage = () => {
         </div>
       )}
 
+      {/* ====== PLAYER ====== */}
       {showPlayer ? (
         <div className="fixed inset-0 bg-black z-50">
           <div className="relative h-full">
@@ -312,7 +325,7 @@ const MovieDetailsPage = () => {
         </div>
       ) : (
         <>
-          {/* Hero Section */}
+          {/* ====== HERO SECTION ====== */}
           <div className="relative h-[50vh] sm:h-[60vh] md:h-[70vh] w-full overflow-hidden">
             <img 
               src={movie.backdrop || movie.poster} 
@@ -344,22 +357,31 @@ const MovieDetailsPage = () => {
                   </span>
                 </div>
                 <div className="flex flex-wrap gap-2 sm:gap-3">
-                  {/* زر المشاهدة المعدل */}
+                  {/* زر المشاهدة */}
                   <button 
                     onClick={handleWatchClick} 
                     className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 sm:px-6 sm:py-2 rounded-lg flex items-center gap-2 transition text-sm sm:text-base"
                   >
                     <FaPlay className="text-sm sm:text-base" /> {t('movie.watch')}
                   </button>
+                  
+                  {/* زر إضافة إلى القائمة - متصل بقاعدة البيانات */}
                   <button 
                     onClick={toggleWatchlist} 
-                    className={`px-4 py-2 sm:px-6 sm:py-2 rounded-lg flex items-center gap-2 transition text-sm sm:text-base ${inWatchlist ? 'bg-green-600' : 'bg-gray-700 hover:bg-gray-600'}`}
+                    disabled={isToggling}
+                    className={`px-4 py-2 sm:px-6 sm:py-2 rounded-lg flex items-center gap-2 transition text-sm sm:text-base disabled:opacity-50 ${
+                      inWatchlist 
+                        ? 'bg-green-600 hover:bg-green-700' 
+                        : 'bg-gray-700 hover:bg-gray-600'
+                    }`}
                   >
                     <FaPlus /> {inWatchlist ? t('movie.added') : t('movie.addToList')}
                   </button>
+                  
                   <button className="bg-gray-700 px-3 py-2 sm:px-4 sm:py-2 rounded-lg hover:bg-gray-600 transition">
                     <FaShare />
                   </button>
+                  
                   <button 
                     onClick={() => setShowLanguages(!showLanguages)} 
                     className="bg-purple-600/50 px-3 py-2 rounded-lg hover:bg-purple-600 transition flex items-center gap-2"
@@ -371,15 +393,17 @@ const MovieDetailsPage = () => {
             </div>
           </div>
 
-          {/* باقي الكود كما هو - Details Section, etc. */}
+          {/* ====== DETAILS SECTION ====== */}
           <div className="w-full px-3 sm:px-4 md:px-6 lg:px-8 py-6 sm:py-8">
             <div className="grid md:grid-cols-3 gap-6 sm:gap-8">
               <div className="md:col-span-2 space-y-4 sm:space-y-6">
+                {/* القصة */}
                 <div className="bg-gray-900/50 rounded-xl p-4 sm:p-6">
                   <h2 className="text-white text-lg sm:text-xl font-bold mb-2 sm:mb-3">{t('movie.synopsis')}</h2>
                   <p className="text-gray-300 text-sm sm:text-base leading-relaxed">{getDescription() || 'لا يوجد وصف متاح لهذا الفيلم'}</p>
                 </div>
                 
+                {/* طاقم العمل */}
                 <div className="bg-gray-900/50 rounded-xl p-4 sm:p-6">
                   <h2 className="text-white text-lg sm:text-xl font-bold mb-2 sm:mb-3">{t('movie.cast')}</h2>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
@@ -394,6 +418,7 @@ const MovieDetailsPage = () => {
                   </div>
                 </div>
 
+                {/* اللغات والترجمات */}
                 {(subtitles.length > 0 || audioTracks.length > 0) && (
                   <div className="bg-gray-900/50 rounded-xl p-4 sm:p-6">
                     <h2 className="text-white text-lg sm:text-xl font-bold mb-2 sm:mb-3 flex items-center gap-2">
@@ -433,6 +458,7 @@ const MovieDetailsPage = () => {
                 )}
               </div>
               
+              {/* ====== SIDEBAR ====== */}
               <div className="space-y-4 sm:space-y-6">
                 <div className="bg-gray-900/50 rounded-xl p-4 sm:p-6">
                   <h3 className="text-white text-base sm:text-lg font-bold mb-2 sm:mb-3">{t('common.additionalInfo')}</h3>
@@ -473,7 +499,7 @@ const MovieDetailsPage = () => {
         </>
       )}
 
-      {/* Languages Modal for Mobile */}
+      {/* ====== LANGUAGES MODAL ====== */}
       {showLanguages && (subtitles.length > 0 || audioTracks.length > 0) && (
         <div className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-4" onClick={() => setShowLanguages(false)}>
           <div className="bg-gray-900 rounded-2xl max-w-md w-full p-6" onClick={(e) => e.stopPropagation()}>
