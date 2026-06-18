@@ -1,343 +1,441 @@
-import React, { useState, useEffect } from 'react';
+// src/pages/admin/AdvancedStatistics.js
+import React, { useState, useEffect, useCallback } from 'react';
 import { 
-  FaChartLine, FaDownload, FaCalendarAlt, FaEye, FaUsers, 
-  FaFilm, FaStar, FaMoneyBillWave, FaArrowUp, FaArrowDown,
-  FaMusic, FaTv, FaChartBar, FaChartPie, FaChartArea
+  FaChartLine, FaDownload, FaEye, FaUsers, 
+  FaFilm, FaMusic, FaTv, FaChartBar,
+  FaSyncAlt, FaUser, FaPlay, FaHeart, FaComment,
+  FaBookmark, FaServer, FaDatabase,
+  FaQuran, FaBook, FaVideo
 } from 'react-icons/fa';
+import { statisticsAPI } from '../../services/api';
 
 const AdvancedStatistics = () => {
-  const [dateRange, setDateRange] = useState('week');
-  const [stats, setStats] = useState({
-    views: [],
-    users: [],
-    revenue: [],
-    content: [],
-    songs: [],
-    series: []
-  });
+  const [dateRange, setDateRange] = useState('month');
+  const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [reportType, setReportType] = useState('views');
-  const [chartType, setChartType] = useState('line');
+  const [error, setError] = useState(null);
+  const [viewsData, setViewsData] = useState([]);
 
-  useEffect(() => {
-    loadStats();
+  // ========== LOAD DATA ==========
+  const loadAllStats = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const data = await statisticsAPI.getFullStatistics();
+      setStats(data);
+      console.log('✅ تم تحميل الإحصائيات الدقيقة:', data);
+
+      const views = await statisticsAPI.getViewsByPeriod(dateRange);
+      setViewsData(views);
+      console.log('✅ تم تحميل مشاهدات الفترة:', views.length);
+
+    } catch (error) {
+      console.error('❌ خطأ في تحميل الإحصائيات:', error);
+      setError(error.message || 'فشل في تحميل الإحصائيات');
+    } finally {
+      setLoading(false);
+    }
   }, [dateRange]);
 
-  const loadStats = () => {
-    setLoading(true);
-    
-    // تحميل البيانات من localStorage
-    const moviesData = loadAllMovies();
-    const seriesData = loadAllSeries();
-    const songsData = loadAllSongs();
-    const usersData = loadAllUsers();
-    
-    // معالجة البيانات للإحصائيات
-    const viewsData = generateViewsData();
-    const usersStats = generateUsersData();
-    const revenueData = generateRevenueData();
-    
-    setStats({
-      views: viewsData,
-      users: usersStats,
-      revenue: revenueData,
-      content: moviesData,
-      songs: songsData,
-      series: seriesData
-    });
-    setLoading(false);
-  };
+  useEffect(() => {
+    loadAllStats();
+  }, [loadAllStats]);
 
-  const loadAllMovies = () => {
-    const categories = ['arabwood', 'hollywood', 'bollywood', 'european', 'asian'];
-    let allMovies = [];
-    categories.forEach(cat => {
-      const data = localStorage.getItem(`cinewave_${cat}`);
-      if (data) {
-        const movies = JSON.parse(data);
-        allMovies = [...allMovies, ...movies];
-      }
-    });
-    return allMovies;
-  };
-
-  const loadAllSeries = () => {
-    const categories = ['arabicseries', 'foreignseries', 'indianseries', 'turkishseries', 'koreanseries'];
-    let allSeries = [];
-    categories.forEach(cat => {
-      const data = localStorage.getItem(`cinewave_${cat}`);
-      if (data) {
-        const series = JSON.parse(data);
-        allSeries = [...allSeries, ...series];
-      }
-    });
-    return allSeries;
-  };
-
-  const loadAllSongs = () => {
-    const data = localStorage.getItem('cinewave_songs');
-    return data ? JSON.parse(data) : [];
-  };
-
-  const loadAllUsers = () => {
-    const data = localStorage.getItem('cinewave_users');
-    return data ? JSON.parse(data) : [];
-  };
-
-  const generateViewsData = () => {
-    const data = [];
-    const days = dateRange === 'week' ? 7 : dateRange === 'month' ? 30 : 365;
-    for (let i = 0; i < days; i++) {
-      data.push({
-        date: new Date(Date.now() - i * 86400000).toISOString().split('T')[0],
-        views: Math.floor(Math.random() * 50000) + 10000,
-        unique_users: Math.floor(Math.random() * 10000) + 2000,
-      });
-    }
-    return data.reverse();
-  };
-
-  const generateUsersData = () => {
-    const data = [];
-    const days = dateRange === 'week' ? 7 : dateRange === 'month' ? 30 : 365;
-    for (let i = 0; i < days; i++) {
-      data.push({
-        date: new Date(Date.now() - i * 86400000).toISOString().split('T')[0],
-        new_users: Math.floor(Math.random() * 500) + 50,
-        active_users: Math.floor(Math.random() * 5000) + 1000,
-        premium_users: Math.floor(Math.random() * 1000) + 100,
-      });
-    }
-    return data.reverse();
-  };
-
-  const generateRevenueData = () => {
-    const data = [];
-    const days = dateRange === 'week' ? 7 : dateRange === 'month' ? 30 : 365;
-    for (let i = 0; i < days; i++) {
-      data.push({
-        date: new Date(Date.now() - i * 86400000).toISOString().split('T')[0],
-        amount: Math.floor(Math.random() * 5000) + 500,
-        subscriptions: Math.floor(Math.random() * 100) + 10,
-      });
-    }
-    return data.reverse();
-  };
-
+  // ========== EXPORT FUNCTIONS ==========
   const exportToCSV = () => {
-    const data = stats[reportType];
-    const headers = Object.keys(data[0] || {});
-    const csvRows = [];
-    csvRows.push(headers.join(','));
+    if (!stats) return;
     
-    for (const row of data) {
-      const values = headers.map(header => {
-        const value = row[header];
-        return typeof value === 'string' ? `"${value}"` : value;
-      });
-      csvRows.push(values.join(','));
-    }
+    const data = {
+      'إحصائيات المحتوى': stats.content,
+      'إحصائيات المستخدمين': stats.users,
+      'إحصائيات التفاعل': stats.interaction,
+      'المشاهدات': stats.views
+    };
     
-    const blob = new Blob([csvRows.join('\n')], { type: 'text/csv' });
+    let csv = 'البيان,القيمة\n';
+    Object.entries(data).forEach(([key, value]) => {
+      if (typeof value === 'object') {
+        Object.entries(value).forEach(([subKey, subValue]) => {
+          if (typeof subValue !== 'object') {
+            csv += `${key} - ${subKey},${subValue}\n`;
+          }
+        });
+      }
+    });
+    
+    const blob = new Blob([csv], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `statistics_${reportType}_${dateRange}_${Date.now()}.csv`;
+    a.download = `statistics_${Date.now()}.csv`;
     a.click();
     URL.revokeObjectURL(url);
   };
 
   const exportToJSON = () => {
+    if (!stats) return;
     const data = {
       exportedAt: new Date().toISOString(),
-      stats: stats,
-      dateRange: dateRange
+      dateRange: dateRange,
+      statistics: stats,
+      viewsData: viewsData
     };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `cinewave_backup_stats_${Date.now()}.json`;
+    a.download = `statistics_${Date.now()}.json`;
     a.click();
     URL.revokeObjectURL(url);
   };
 
-  const totalStats = {
-    totalViews: stats.views.reduce((a, b) => a + b.views, 0),
-    totalUsers: stats.users.reduce((a, b) => a + b.active_users, 0),
-    totalRevenue: stats.revenue.reduce((a, b) => a + b.amount, 0),
-    totalSubscriptions: stats.revenue.reduce((a, b) => a + b.subscriptions, 0),
-    totalMovies: stats.content.length,
-    totalSeries: stats.series.length,
-    totalSongs: stats.songs.length,
-    totalArtists: JSON.parse(localStorage.getItem('cinewave_song_artists') || '[]').length,
-    avgRating: 4.6,
-    viewsChange: '+15%',
-    usersChange: '+8%',
-    revenueChange: '+22%'
+  // ========== FORMAT SIZE ==========
+  const formatSize = (bytes) => {
+    if (!bytes) return '0 KB';
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(2)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
   };
 
-  // حساب المحتوى الأكثر مشاهدة
-  const topContent = [...stats.content, ...stats.series, ...stats.songs]
-    .sort((a, b) => (b.views || b.rating || 0) - (a.views || a.rating || 0))
-    .slice(0, 10);
+  // ========== LOADING ==========
+  if (loading) {
+    return (
+      <div className="flex justify-center items-center h-64">
+        <div className="text-center">
+          <div className="w-12 h-12 border-4 border-purple-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-gray-400">جاري تحميل الإحصائيات الدقيقة...</p>
+        </div>
+      </div>
+    );
+  }
 
-  if (loading) return <div className="flex justify-center items-center h-64"><div className="w-12 h-12 border-4 border-purple-600 border-t-transparent rounded-full animate-spin"></div></div>;
+  if (error) {
+    return (
+      <div className="bg-gray-900 rounded-xl p-6 text-center">
+        <div className="text-red-400 text-4xl mb-4">⚠️</div>
+        <h3 className="text-white text-xl font-bold mb-2">حدث خطأ</h3>
+        <p className="text-gray-400">{error}</p>
+        <button 
+          onClick={loadAllStats} 
+          className="mt-4 bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700"
+        >
+          إعادة المحاولة
+        </button>
+      </div>
+    );
+  }
+
+  if (!stats) {
+    return (
+      <div className="bg-gray-900 rounded-xl p-6 text-center">
+        <div className="text-gray-500 text-4xl mb-4">📊</div>
+        <h3 className="text-white text-xl font-bold mb-2">لا توجد بيانات</h3>
+        <p className="text-gray-400">لم يتم العثور على إحصائيات</p>
+      </div>
+    );
+  }
+
+  const { content, users, interaction, views, ratings, database_size } = stats;
 
   return (
-    <div className="bg-gray-900 rounded-xl p-6 border border-gray-800">
-      <div className="flex justify-between items-center mb-6 flex-wrap gap-4">
-        <h2 className="text-2xl font-bold text-white flex items-center gap-2">
-          <FaChartLine className="text-purple-400" /> إحصائيات متقدمة
+    <div className="bg-gray-900 rounded-xl p-4 sm:p-6 border border-gray-800">
+      {/* ====== HEADER ====== */}
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-6">
+        <h2 className="text-xl sm:text-2xl font-bold text-white flex items-center gap-2">
+          <FaChartLine className="text-purple-400" /> إحصائيات دقيقة
+          <span className="text-sm text-gray-500 font-normal">
+            (آخر تحديث: {new Date(stats.last_updated).toLocaleString()})
+          </span>
         </h2>
-        <div className="flex gap-3">
+        <div className="flex flex-wrap gap-2">
           <select 
             value={dateRange} 
             onChange={(e) => setDateRange(e.target.value)} 
             className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm"
           >
-            <option value="week">آخر 7 أيام</option>
-            <option value="month">آخر 30 يوماً</option>
-            <option value="year">آخر سنة</option>
+            <option value="week">📅 آخر 7 أيام</option>
+            <option value="month">📅 آخر 30 يوماً</option>
+            <option value="year">📅 آخر سنة</option>
           </select>
-          <div className="flex gap-2">
-            <button onClick={exportToCSV} className="bg-green-600 text-white px-3 py-2 rounded-lg text-sm flex items-center gap-1 hover:bg-green-700">
-              <FaDownload /> CSV
+          <button 
+            onClick={loadAllStats} 
+            className="bg-gray-700 text-white px-3 py-2 rounded-lg hover:bg-gray-600 transition text-sm flex items-center gap-1"
+            title="تحديث"
+          >
+            <FaSyncAlt className={loading ? 'animate-spin' : ''} />
+          </button>
+          <div className="flex gap-1">
+            <button onClick={exportToCSV} className="bg-green-600 text-white px-3 py-2 rounded-lg text-sm flex items-center gap-1 hover:bg-green-700 transition">
+              <FaDownload size={12} /> CSV
             </button>
-            <button onClick={exportToJSON} className="bg-blue-600 text-white px-3 py-2 rounded-lg text-sm flex items-center gap-1 hover:bg-blue-700">
-              <FaDownload /> JSON
+            <button onClick={exportToJSON} className="bg-blue-600 text-white px-3 py-2 rounded-lg text-sm flex items-center gap-1 hover:bg-blue-700 transition">
+              <FaDownload size={12} /> JSON
             </button>
           </div>
         </div>
       </div>
 
-      {/* بطاقات الإحصائيات الرئيسية */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-        <StatCard title="إجمالي المشاهدات" value={totalStats.totalViews.toLocaleString()} change={totalStats.viewsChange} icon={FaEye} color="purple" />
-        <StatCard title="المستخدمين النشطين" value={totalStats.totalUsers.toLocaleString()} change={totalStats.usersChange} icon={FaUsers} color="blue" />
-        <StatCard title="الإيرادات" value={`$${totalStats.totalRevenue.toLocaleString()}`} change={totalStats.revenueChange} icon={FaMoneyBillWave} color="green" />
-        <StatCard title="متوسط التقييم" value={totalStats.avgRating} change="+0.3" icon={FaStar} color="yellow" />
-      </div>
-
-      {/* إحصائيات المحتوى */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-        <div className="bg-gray-800 rounded-xl p-4 text-center">
-          <FaFilm className="text-purple-400 text-2xl mx-auto mb-2" />
-          <p className="text-gray-400 text-sm">الأفلام</p>
-          <p className="text-white text-2xl font-bold">{totalStats.totalMovies}</p>
+      {/* ====== MAIN STATS CARDS ====== */}
+      <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
+        <div className="bg-gray-800 rounded-xl p-4 text-center border border-gray-700">
+          <div className="text-purple-400 text-2xl mb-1">👁️</div>
+          <p className="text-gray-500 text-xs">إجمالي المشاهدات</p>
+          <p className="text-white text-xl sm:text-2xl font-bold">{views.total.toLocaleString()}</p>
+          <p className="text-green-400 text-xs">{views.daily?.length || 0} يوم مسجل</p>
         </div>
-        <div className="bg-gray-800 rounded-xl p-4 text-center">
-          <FaTv className="text-blue-400 text-2xl mx-auto mb-2" />
-          <p className="text-gray-400 text-sm">المسلسلات</p>
-          <p className="text-white text-2xl font-bold">{totalStats.totalSeries}</p>
+        <div className="bg-gray-800 rounded-xl p-4 text-center border border-gray-700">
+          <div className="text-blue-400 text-2xl mb-1">👥</div>
+          <p className="text-gray-500 text-xs">المستخدمين النشطين</p>
+          <p className="text-white text-xl sm:text-2xl font-bold">{users.active.toLocaleString()}</p>
+          <p className="text-gray-500 text-xs">من {users.total} إجمالي</p>
         </div>
-        <div className="bg-gray-800 rounded-xl p-4 text-center">
-          <FaMusic className="text-pink-400 text-2xl mx-auto mb-2" />
-          <p className="text-gray-400 text-sm">الأغاني</p>
-          <p className="text-white text-2xl font-bold">{totalStats.totalSongs}</p>
+        <div className="bg-gray-800 rounded-xl p-4 text-center border border-gray-700">
+          <div className="text-yellow-400 text-2xl mb-1">⭐</div>
+          <p className="text-gray-500 text-xs">المستخدمين المميزين</p>
+          <p className="text-white text-xl sm:text-2xl font-bold">{users.premium.toLocaleString()}</p>
+          <p className="text-gray-500 text-xs">{(users.premium / users.total * 100 || 0).toFixed(1)}% من الإجمالي</p>
         </div>
-        <div className="bg-gray-800 rounded-xl p-4 text-center">
-          <FaUsers className="text-green-400 text-2xl mx-auto mb-2" />
-          <p className="text-gray-400 text-sm">الفنانين</p>
-          <p className="text-white text-2xl font-bold">{totalStats.totalArtists}</p>
+        <div className="bg-gray-800 rounded-xl p-4 text-center border border-gray-700">
+          <div className="text-green-400 text-2xl mb-1">💾</div>
+          <p className="text-gray-500 text-xs">حجم قاعدة البيانات</p>
+          <p className="text-white text-xl sm:text-2xl font-bold">{formatSize(database_size)}</p>
+          <p className="text-gray-500 text-xs">{Object.keys(content).length} جداول</p>
         </div>
       </div>
 
-      {/* اختيار نوع التقرير */}
-      <div className="flex gap-3 mb-6">
-        {['views', 'users', 'revenue'].map(type => (
-          <button 
-            key={type} 
-            onClick={() => setReportType(type)} 
-            className={`px-4 py-2 rounded-lg transition ${reportType === type ? 'bg-purple-600 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'}`}
-          >
-            {type === 'views' ? 'المشاهدات' : type === 'users' ? 'المستخدمين' : 'الإيرادات'}
-          </button>
-        ))}
+      {/* ====== CONTENT STATS ====== */}
+      <h3 className="text-white text-sm font-bold mb-3 flex items-center gap-2">
+        <FaDatabase className="text-purple-400" /> إحصائيات المحتوى
+      </h3>
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2 mb-6">
+        <div className="bg-gray-800 rounded-lg p-2 text-center">
+          <FaFilm className="text-purple-400 text-lg mx-auto" />
+          <p className="text-gray-500 text-[10px]">أفلام</p>
+          <p className="text-white font-bold">{content.movies}</p>
+        </div>
+        <div className="bg-gray-800 rounded-lg p-2 text-center">
+          <FaTv className="text-blue-400 text-lg mx-auto" />
+          <p className="text-gray-500 text-[10px]">مسلسلات</p>
+          <p className="text-white font-bold">{content.series}</p>
+        </div>
+        <div className="bg-gray-800 rounded-lg p-2 text-center">
+          <FaPlay className="text-yellow-400 text-lg mx-auto" />
+          <p className="text-gray-500 text-[10px]">حلقات</p>
+          <p className="text-white font-bold">{content.episodes}</p>
+        </div>
+        <div className="bg-gray-800 rounded-lg p-2 text-center">
+          <FaMusic className="text-pink-400 text-lg mx-auto" />
+          <p className="text-gray-500 text-[10px]">أغاني</p>
+          <p className="text-white font-bold">{content.songs}</p>
+        </div>
+        <div className="bg-gray-800 rounded-lg p-2 text-center">
+          <FaUser className="text-green-400 text-lg mx-auto" />
+          <p className="text-gray-500 text-[10px]">فنانين</p>
+          <p className="text-white font-bold">{content.artists}</p>
+        </div>
+        <div className="bg-gray-800 rounded-lg p-2 text-center">
+          <FaQuran className="text-emerald-400 text-lg mx-auto" />
+          <p className="text-gray-500 text-[10px]">قراء</p>
+          <p className="text-white font-bold">{content.reciters}</p>
+        </div>
+        <div className="bg-gray-800 rounded-lg p-2 text-center">
+          <FaBook className="text-indigo-400 text-lg mx-auto" />
+          <p className="text-gray-500 text-[10px]">سور</p>
+          <p className="text-white font-bold">{content.surahs}</p>
+        </div>
+        <div className="bg-gray-800 rounded-lg p-2 text-center">
+          <FaTv className="text-red-400 text-lg mx-auto" />
+          <p className="text-gray-500 text-[10px]">قنوات</p>
+          <p className="text-white font-bold">{content.channels}</p>
+        </div>
+        <div className="bg-gray-800 rounded-lg p-2 text-center">
+          <FaVideo className="text-orange-400 text-lg mx-auto" />
+          <p className="text-gray-500 text-[10px]">كليبات</p>
+          <p className="text-white font-bold">{content.clips}</p>
+        </div>
       </div>
 
-      {/* جدول البيانات */}
-      <div className="overflow-x-auto mb-8">
-        <table className="w-full">
-          <thead className="bg-gray-800">
-            <tr>
-              {Object.keys(stats[reportType][0] || {}).map(key => (
-                <th key={key} className="px-4 py-3 text-right text-white text-sm">
-                  {key === 'date' ? 'التاريخ' :
-                   key === 'views' ? 'المشاهدات' :
-                   key === 'unique_users' ? 'مستخدمين فريدين' :
-                   key === 'new_users' ? 'مستخدمين جدد' :
-                   key === 'active_users' ? 'مستخدمين نشطين' :
-                   key === 'premium_users' ? 'مستخدمين مميزين' :
-                   key === 'amount' ? 'المبلغ ($)' :
-                   key === 'subscriptions' ? 'اشتراكات جديدة' : key}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {stats[reportType].map((row, idx) => (
-              <tr key={idx} className="border-b border-gray-800 hover:bg-gray-800/30">
-                {Object.values(row).map((value, i) => (
-                  <td key={i} className="px-4 py-3 text-gray-300 text-sm">
-                    {typeof value === 'number' ? value.toLocaleString() : value}
-                  </td>
-                ))}
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      {/* ====== USER STATS ====== */}
+      <h3 className="text-white text-sm font-bold mb-3 flex items-center gap-2">
+        <FaUsers className="text-blue-400" /> إحصائيات المستخدمين
+      </h3>
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 mb-6">
+        <div className="bg-gray-800 rounded-lg p-3 text-center border border-gray-700">
+          <p className="text-gray-500 text-xs">👥 إجمالي</p>
+          <p className="text-white text-lg font-bold">{users.total}</p>
+        </div>
+        <div className="bg-gray-800 rounded-lg p-3 text-center border border-green-700">
+          <p className="text-gray-500 text-xs">✅ نشطين</p>
+          <p className="text-green-400 text-lg font-bold">{users.active}</p>
+        </div>
+        <div className="bg-gray-800 rounded-lg p-3 text-center border border-red-700">
+          <p className="text-gray-500 text-xs">🚫 محظورين</p>
+          <p className="text-red-400 text-lg font-bold">{users.banned}</p>
+        </div>
+        <div className="bg-gray-800 rounded-lg p-3 text-center border border-yellow-700">
+          <p className="text-gray-500 text-xs">⭐ مميزين</p>
+          <p className="text-yellow-400 text-lg font-bold">{users.premium}</p>
+        </div>
+        <div className="bg-gray-800 rounded-lg p-3 text-center border border-blue-700">
+          <p className="text-gray-500 text-xs">📋 ستاندرد</p>
+          <p className="text-blue-400 text-lg font-bold">{users.standard}</p>
+        </div>
+        <div className="bg-gray-800 rounded-lg p-3 text-center border border-gray-700">
+          <p className="text-gray-500 text-xs">🆓 مجاني</p>
+          <p className="text-gray-400 text-lg font-bold">{users.free}</p>
+        </div>
+        <div className="bg-gray-800 rounded-lg p-3 text-center border border-purple-700">
+          <p className="text-gray-500 text-xs">🛡️ مشرفين</p>
+          <p className="text-purple-400 text-lg font-bold">{users.admin}</p>
+        </div>
+        <div className="bg-gray-800 rounded-lg p-3 text-center border border-gray-700">
+          <p className="text-gray-500 text-xs">📊 نسبة المميزين</p>
+          <p className="text-yellow-400 text-lg font-bold">{(users.premium / users.total * 100 || 0).toFixed(1)}%</p>
+        </div>
       </div>
 
-      {/* أعلى 10 محتوى */}
-      <div className="mt-8">
-        <h3 className="text-white text-lg font-bold mb-4 flex items-center gap-2">
-          <FaStar className="text-yellow-400" /> أعلى 10 محتوى مشاهدة
-        </h3>
-        <div className="space-y-2">
-          {topContent.map((item, idx) => (
-            <div key={idx} className="flex items-center justify-between p-3 bg-gray-800 rounded-lg">
-              <div className="flex items-center gap-3">
-                <span className="text-yellow-400 font-bold text-lg w-8">#{idx + 1}</span>
-                <div>
-                  <p className="text-white font-medium">{item.title}</p>
-                  <p className="text-gray-500 text-xs">{item.genre || 'غير مصنف'} • {item.year || '-'}</p>
-                </div>
-              </div>
-              <div className="text-right">
-                <p className="text-purple-400 font-bold">{item.views?.toLocaleString() || item.rating || 0} {item.views ? 'مشاهدة' : 'تقييم'}</p>
-              </div>
+      {/* ====== INTERACTION STATS ====== */}
+      <h3 className="text-white text-sm font-bold mb-3 flex items-center gap-2">
+        <FaHeart className="text-red-400" /> إحصائيات التفاعل
+      </h3>
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-6">
+        <div className="bg-gray-800 rounded-lg p-3 text-center border border-gray-700">
+          <FaComment className="text-blue-400 text-lg mx-auto" />
+          <p className="text-gray-500 text-xs">تعليقات</p>
+          <p className="text-white text-lg font-bold">{interaction.comments}</p>
+        </div>
+        <div className="bg-gray-800 rounded-lg p-3 text-center border border-gray-700">
+          <FaHeart className="text-red-400 text-lg mx-auto" />
+          <p className="text-gray-500 text-xs">إعجابات</p>
+          <p className="text-white text-lg font-bold">{interaction.likes}</p>
+        </div>
+        <div className="bg-gray-800 rounded-lg p-3 text-center border border-gray-700">
+          <FaBookmark className="text-yellow-400 text-lg mx-auto" />
+          <p className="text-gray-500 text-xs">مفضلة</p>
+          <p className="text-white text-lg font-bold">{interaction.favorites}</p>
+        </div>
+        <div className="bg-gray-800 rounded-lg p-3 text-center border border-gray-700">
+          <FaEye className="text-purple-400 text-lg mx-auto" />
+          <p className="text-gray-500 text-xs">سجل المشاهدة</p>
+          <p className="text-white text-lg font-bold">{interaction.watch_history}</p>
+        </div>
+      </div>
+
+      {/* ====== RATINGS ====== */}
+      {ratings && (
+        <div className="bg-gray-800 rounded-xl p-4 mb-6">
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <div>
+              <p className="text-gray-500 text-xs">⭐ متوسط التقييم</p>
+              <p className="text-yellow-400 text-2xl font-bold">{ratings.average.toFixed(1)}</p>
             </div>
-          ))}
+            <div className="text-right">
+              <p className="text-gray-500 text-xs">عدد التقييمات</p>
+              <p className="text-white text-xl font-bold">{ratings.total}</p>
+            </div>
+            <div className="text-right">
+              <p className="text-gray-500 text-xs">متوسط التقدم</p>
+              <p className="text-blue-400 text-xl font-bold">{stats.avg_progress?.toFixed(1) || 0}%</p>
+            </div>
+          </div>
         </div>
-      </div>
-    </div>
-  );
-};
+      )}
 
-const StatCard = ({ title, value, change, icon: Icon, color }) => {
-  const isPositive = change.startsWith('+');
-  
-  const colorClasses = {
-    purple: 'bg-purple-500/20 text-purple-400',
-    blue: 'bg-blue-500/20 text-blue-400',
-    green: 'bg-green-500/20 text-green-400',
-    yellow: 'bg-yellow-500/20 text-yellow-400'
-  };
-  
-  return (
-    <div className="bg-gray-800 rounded-xl p-4">
-      <div className="flex justify-between items-start mb-2">
-        <div className={`w-10 h-10 ${colorClasses[color]} rounded-lg flex items-center justify-center`}>
-          <Icon className={`text-${color}-400`} />
-        </div>
-        <span className={`text-sm flex items-center gap-1 ${isPositive ? 'text-green-400' : 'text-red-400'}`}>
-          {isPositive ? <FaArrowUp className="text-xs" /> : <FaArrowDown className="text-xs" />}
-          {change}
-        </span>
+      {/* ====== TOP CONTENT ====== */}
+      <div className="grid md:grid-cols-2 gap-4">
+        {views.movies && views.movies.length > 0 && (
+          <div className="bg-gray-800 rounded-xl p-4">
+            <h4 className="text-white text-sm font-bold mb-3 flex items-center gap-2">
+              <FaFilm className="text-purple-400" /> أعلى أفلام مشاهدة
+            </h4>
+            <div className="space-y-2 max-h-60 overflow-y-auto">
+              {views.movies.slice(0, 5).map((movie, idx) => (
+                <div key={idx} className="flex items-center justify-between p-2 bg-gray-700/30 rounded-lg">
+                  <div className="flex items-center gap-2 flex-1 min-w-0">
+                    <span className="text-yellow-400 text-sm font-bold w-5">#{idx + 1}</span>
+                    <span className="text-white text-sm truncate">{movie.title || movie.title_ar}</span>
+                  </div>
+                  <span className="text-purple-400 text-sm font-bold flex-shrink-0">
+                    {movie.views || 0}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {views.series && views.series.length > 0 && (
+          <div className="bg-gray-800 rounded-xl p-4">
+            <h4 className="text-white text-sm font-bold mb-3 flex items-center gap-2">
+              <FaTv className="text-blue-400" /> أعلى مسلسلات مشاهدة
+            </h4>
+            <div className="space-y-2 max-h-60 overflow-y-auto">
+              {views.series.slice(0, 5).map((series, idx) => (
+                <div key={idx} className="flex items-center justify-between p-2 bg-gray-700/30 rounded-lg">
+                  <div className="flex items-center gap-2 flex-1 min-w-0">
+                    <span className="text-yellow-400 text-sm font-bold w-5">#{idx + 1}</span>
+                    <span className="text-white text-sm truncate">{series.title || series.title_ar}</span>
+                  </div>
+                  <span className="text-purple-400 text-sm font-bold flex-shrink-0">
+                    {series.views || 0}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
-      <h3 className="text-gray-400 text-sm">{title}</h3>
-      <p className="text-white text-2xl font-bold mt-1">{value}</p>
+
+      {/* ====== VIEWS BY TYPE ====== */}
+      {views.by_type && views.by_type.length > 0 && (
+        <div className="mt-4 bg-gray-800 rounded-xl p-4">
+          <h4 className="text-white text-sm font-bold mb-3 flex items-center gap-2">
+            <FaChartBar className="text-green-400" /> توزيع المشاهدات حسب النوع
+          </h4>
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2">
+            {views.by_type.map((item, idx) => (
+              <div key={idx} className="text-center p-2 bg-gray-700/30 rounded-lg">
+                <p className="text-gray-400 text-xs">
+                  {item.item_type === 'movie' ? '🎬 فيلم' :
+                   item.item_type === 'series' ? '📺 مسلسل' :
+                   item.item_type === 'song' ? '🎵 أغنية' :
+                   item.item_type === 'clip' ? '🎬 كليب' :
+                   item.item_type === 'quran' ? '🕌 قرآن' : item.item_type}
+                </p>
+                <p className="text-white font-bold">{item.count}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ====== DATABASE INFO ====== */}
+      <div className="mt-4 p-4 bg-gray-800 rounded-xl border border-gray-700">
+        <h4 className="text-white text-sm font-bold mb-2 flex items-center gap-2">
+          <FaServer className="text-purple-400" /> معلومات قاعدة البيانات
+        </h4>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+          <div className="text-center">
+            <p className="text-gray-500 text-xs">📊 إجمالي السجلات</p>
+            <p className="text-white font-bold">
+              {Object.values(content).reduce((a, b) => a + b, 0) + 
+               users.total + interaction.comments + interaction.likes + interaction.favorites + interaction.watch_history}
+            </p>
+          </div>
+          <div className="text-center">
+            <p className="text-gray-500 text-xs">💾 حجم البيانات</p>
+            <p className="text-white font-bold">{formatSize(database_size)}</p>
+          </div>
+          <div className="text-center">
+            <p className="text-gray-500 text-xs">📋 عدد الجداول</p>
+            <p className="text-white font-bold">14</p>
+          </div>
+          <div className="text-center">
+            <p className="text-gray-500 text-xs">🔄 آخر تحديث</p>
+            <p className="text-white font-bold text-xs">{new Date(stats.last_updated).toLocaleDateString()}</p>
+          </div>
+        </div>
+      </div>
     </div>
   );
 };

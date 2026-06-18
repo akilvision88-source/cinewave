@@ -1,5 +1,11 @@
+// src/pages/admin/AdminSongsManager.js
 import React, { useState, useEffect } from 'react';
-import { FaPlus, FaEdit, FaTrash, FaMusic, FaUser, FaSave, FaTimes, FaSearch, FaPlay, FaStop, FaHeadphones, FaGlobe } from 'react-icons/fa';
+import { 
+  FaPlus, FaEdit, FaTrash, FaMusic, FaUser, FaSave, FaTimes, 
+  FaSearch, FaPlay, FaStop, FaHeadphones, FaGlobe, FaSyncAlt,
+  FaDownload, FaChartLine, FaClock
+} from 'react-icons/fa';
+import { songsAPI, artistsAPI } from '../../services/api';
 
 const AdminSongsManager = () => {
   const [artists, setArtists] = useState([]);
@@ -11,9 +17,11 @@ const AdminSongsManager = () => {
   const [editingSong, setEditingSong] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [previewAudio, setPreviewAudio] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
   
   const [artistForm, setArtistForm] = useState({
-    name: '', nameAr: '', nameEn: '', country: '', genre: '', image: '', bio: '', songsCount: 0
+    name: '', nameAr: '', nameEn: '', country: '', genre: '', image: '', bio: ''
   });
   
   const [songForm, setSongForm] = useState({
@@ -21,7 +29,7 @@ const AdminSongsManager = () => {
     lyrics: '', year: new Date().getFullYear(), genre: '', subGenre: '', plays: 0
   });
 
-  // قائمة البلدان
+  // ========== CONSTANTS ==========
   const countries = [
     { id: 'moroccan', label: '🇲🇦 المغرب', nameAr: 'المغرب', nameEn: 'Morocco' },
     { id: 'egyptian', label: '🇪🇬 مصر', nameAr: 'مصر', nameEn: 'Egypt' },
@@ -40,7 +48,6 @@ const AdminSongsManager = () => {
     { id: 'russian', label: '🇷🇺 روسي', nameAr: 'روسيا', nameEn: 'Russia' },
   ];
 
-  // قائمة التصنيفات الموسيقية
   const musicGenres = [
     { id: 'pop', label: 'بوب', nameAr: 'بوب', nameEn: 'Pop' },
     { id: 'rock', label: 'روك', nameAr: 'روك', nameEn: 'Rock' },
@@ -56,7 +63,6 @@ const AdminSongsManager = () => {
     { id: 'latin', label: 'لاتيني', nameAr: 'لاتيني', nameEn: 'Latin' },
   ];
 
-  // قائمة التصنيفات الفرعية
   const subGenres = [
     { id: 'andalusian', label: 'أندلسي', parent: 'arabic' },
     { id: 'chaabi', label: 'شعبي', parent: 'arabic' },
@@ -70,132 +76,195 @@ const AdminSongsManager = () => {
     { id: 'house', label: 'هاوس', parent: 'electronic' },
   ];
 
-  // تحميل البيانات
+  // ========== LOAD DATA ==========
+  const loadArtists = async () => {
+    try {
+      const data = await artistsAPI.getAll();
+      setArtists(data);
+      console.log('✅ تم تحميل الفنانين:', data.length);
+      return data;
+    } catch (error) {
+      console.error('❌ خطأ في تحميل الفنانين:', error);
+      setArtists([]);
+      return [];
+    }
+  };
+
+  const loadSongs = async () => {
+    try {
+      const data = await songsAPI.getAll();
+      setSongs(data);
+      console.log('✅ تم تحميل الأغاني:', data.length);
+      return data;
+    } catch (error) {
+      console.error('❌ خطأ في تحميل الأغاني:', error);
+      setSongs([]);
+      return [];
+    }
+  };
+
+  const loadAllData = async () => {
+    setLoading(true);
+    try {
+      await Promise.all([loadArtists(), loadSongs()]);
+    } catch (error) {
+      console.error('❌ خطأ في تحميل البيانات:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
-    loadArtists();
-    loadSongs();
+    loadAllData();
   }, []);
 
-  const loadArtists = () => {
-    const saved = localStorage.getItem('cinewave_song_artists');
-    if (saved) setArtists(JSON.parse(saved));
-    else setArtists([]);
-  };
-
-  const loadSongs = () => {
-    const saved = localStorage.getItem('cinewave_songs');
-    if (saved) setSongs(JSON.parse(saved));
-    else setSongs([]);
-  };
-
-  // الحصول على اسم البلد
+  // ========== HELPERS ==========
   const getCountryLabel = (countryId) => {
     const country = countries.find(c => c.id === countryId);
-    return country?.label || countryId;
+    return country?.label || countryId || 'غير محدد';
   };
 
-  // الحصول على اسم التصنيف
   const getGenreLabel = (genreId) => {
     const genre = musicGenres.find(g => g.id === genreId);
-    return genre?.label || genreId;
+    return genre?.label || genreId || 'غير محدد';
   };
 
-  // إدارة الفنانين
-  const handleArtistSubmit = () => {
+  const getArtistName = (artistId) => {
+    const artist = artists.find(a => a.id === artistId);
+    return artist?.name || 'غير معروف';
+  };
+
+  const getAvailableSubGenres = () => {
+    if (!songForm.genre) return [];
+    return subGenres.filter(sg => sg.parent === songForm.genre);
+  };
+
+  // ========== ARTIST CRUD ==========
+  const handleArtistSubmit = async () => {
     if (!artistForm.name) {
       alert('الرجاء إدخال اسم الفنان');
       return;
     }
     
-    const newArtist = { 
-      ...artistForm, 
-      id: editingArtist ? editingArtist.id : Date.now(), 
-      songsCount: editingArtist ? editingArtist.songsCount : 0
-    };
-    
-    let newArtists;
-    if (editingArtist) {
-      newArtists = artists.map(a => a.id === editingArtist.id ? newArtist : a);
-    } else {
-      newArtists = [...artists, newArtist];
+    setSaving(true);
+    try {
+      const artistData = {
+        name: artistForm.name,
+        name_ar: artistForm.nameAr || null,
+        name_en: artistForm.nameEn || null,
+        country: artistForm.country || null,
+        genre: artistForm.genre || null,
+        image: artistForm.image || null,
+        bio: artistForm.bio || null
+      };
+
+      console.log('📤 إرسال بيانات الفنان:', JSON.stringify(artistData, null, 2));
+
+      let response;
+      if (editingArtist) {
+        response = await artistsAPI.updateArtist(editingArtist.id, artistData);
+        console.log('✅ تم تحديث الفنان:', response);
+      } else {
+        response = await artistsAPI.addArtist(artistData);
+        console.log('✅ تم إضافة الفنان:', response);
+      }
+
+      await loadAllData();
+      setShowArtistModal(false);
+      setEditingArtist(null);
+      setArtistForm({ name: '', nameAr: '', nameEn: '', country: '', genre: '', image: '', bio: '' });
+      alert(editingArtist ? '✅ تم تحديث الفنان بنجاح' : '✅ تم إضافة الفنان بنجاح');
+    } catch (error) {
+      console.error('❌ خطأ في حفظ الفنان:', error);
+      alert('❌ حدث خطأ: ' + (error.message || 'فشل في حفظ الفنان'));
+    } finally {
+      setSaving(false);
     }
-    
-    setArtists(newArtists);
-    localStorage.setItem('cinewave_song_artists', JSON.stringify(newArtists));
-    setShowArtistModal(false);
-    setEditingArtist(null);
-    setArtistForm({ name: '', nameAr: '', nameEn: '', country: '', genre: '', image: '', bio: '', songsCount: 0 });
   };
 
-  const handleDeleteArtist = (artistId) => {
-    if (window.confirm('هل أنت متأكد من حذف هذا الفنان وجميع أغانيه؟')) {
-      const newArtists = artists.filter(a => a.id !== artistId);
-      setArtists(newArtists);
-      localStorage.setItem('cinewave_song_artists', JSON.stringify(newArtists));
-      
-      const newSongs = songs.filter(s => s.artistId !== artistId);
-      setSongs(newSongs);
-      localStorage.setItem('cinewave_songs', JSON.stringify(newSongs));
+  const handleDeleteArtist = async (artistId) => {
+    if (!window.confirm('هل أنت متأكد من حذف هذا الفنان وجميع أغانيه؟')) return;
+
+    try {
+      await artistsAPI.deleteArtist(artistId);
+      console.log('✅ تم حذف الفنان');
       
       if (selectedArtist?.id === artistId) {
         setSelectedArtist(null);
       }
+      
+      await loadAllData();
+    } catch (error) {
+      console.error('❌ خطأ في حذف الفنان:', error);
+      alert('❌ حدث خطأ في حذف الفنان');
     }
   };
 
-  // إدارة الأغاني
-  const handleSongSubmit = () => {
-    if (!songForm.title || !songForm.audioUrl || !selectedArtist) {
+  // ========== SONG CRUD ==========
+  const handleSongSubmit = async () => {
+    if (!songForm.title || !songForm.audioUrl) {
       alert('الرجاء إدخال عنوان الأغنية ورابط الصوت');
       return;
     }
     
-    const newSong = { 
-      ...songForm, 
-      id: editingSong ? editingSong.id : Date.now(), 
-      artistId: selectedArtist.id,
-      artistName: selectedArtist.name,
-      artistImage: selectedArtist.image,
-      artistCountry: selectedArtist.country,
-      plays: editingSong ? editingSong.plays : Math.floor(Math.random() * 10000) + 1000
-    };
-    
-    let newSongs;
-    if (editingSong) {
-      newSongs = songs.map(s => s.id === editingSong.id ? newSong : s);
-    } else {
-      newSongs = [...songs, newSong];
+    if (!selectedArtist) {
+      alert('الرجاء اختيار فنان أولاً');
+      return;
     }
     
-    setSongs(newSongs);
-    localStorage.setItem('cinewave_songs', JSON.stringify(newSongs));
-    
-    const artistSongsCount = newSongs.filter(s => s.artistId === selectedArtist.id).length;
-    const updatedArtists = artists.map(a => 
-      a.id === selectedArtist.id ? { ...a, songsCount: artistSongsCount } : a
-    );
-    setArtists(updatedArtists);
-    localStorage.setItem('cinewave_song_artists', JSON.stringify(updatedArtists));
-    
-    setShowSongModal(false);
-    setEditingSong(null);
-    setSongForm({ title: '', titleAr: '', titleEn: '', duration: '', audioUrl: '', coverImage: '', lyrics: '', year: new Date().getFullYear(), genre: '', subGenre: '', plays: 0 });
+    setSaving(true);
+    try {
+      const songData = {
+        artist_id: selectedArtist.id,
+        title: songForm.title,
+        title_ar: songForm.titleAr || null,
+        title_en: songForm.titleEn || null,
+        audio_url: songForm.audioUrl,
+        cover_image: songForm.coverImage || null,
+        duration: songForm.duration || null,
+        year: parseInt(songForm.year) || new Date().getFullYear(),
+        genre: songForm.genre || null,
+        lyrics: songForm.lyrics || null
+      };
+
+      console.log('📤 إرسال بيانات الأغنية:', JSON.stringify(songData, null, 2));
+
+      let response;
+      if (editingSong) {
+        response = await songsAPI.updateSong(editingSong.id, songData);
+        console.log('✅ تم تحديث الأغنية:', response);
+      } else {
+        response = await songsAPI.addSong(songData);
+        console.log('✅ تم إضافة الأغنية:', response);
+      }
+
+      await loadAllData();
+      setShowSongModal(false);
+      setEditingSong(null);
+      setSongForm({ 
+        title: '', titleAr: '', titleEn: '', duration: '', 
+        audioUrl: '', coverImage: '', lyrics: '', 
+        year: new Date().getFullYear(), genre: '', subGenre: '', plays: 0 
+      });
+      alert(editingSong ? '✅ تم تحديث الأغنية بنجاح' : '✅ تم إضافة الأغنية بنجاح');
+    } catch (error) {
+      console.error('❌ خطأ في حفظ الأغنية:', error);
+      alert('❌ حدث خطأ: ' + (error.message || 'فشل في حفظ الأغنية'));
+    } finally {
+      setSaving(false);
+    }
   };
 
-  const handleDeleteSong = (songId) => {
-    if (window.confirm('هل أنت متأكد من حذف هذه الأغنية؟')) {
-      const newSongs = songs.filter(s => s.id !== songId);
-      setSongs(newSongs);
-      localStorage.setItem('cinewave_songs', JSON.stringify(newSongs));
-      
-      if (selectedArtist) {
-        const artistSongsCount = newSongs.filter(s => s.artistId === selectedArtist.id).length;
-        const updatedArtists = artists.map(a => 
-          a.id === selectedArtist.id ? { ...a, songsCount: artistSongsCount } : a
-        );
-        setArtists(updatedArtists);
-        localStorage.setItem('cinewave_song_artists', JSON.stringify(updatedArtists));
-      }
+  const handleDeleteSong = async (songId) => {
+    if (!window.confirm('هل أنت متأكد من حذف هذه الأغنية؟')) return;
+
+    try {
+      await songsAPI.deleteSong(songId);
+      console.log('✅ تم حذف الأغنية');
+      await loadAllData();
+    } catch (error) {
+      console.error('❌ خطأ في حذف الأغنية:', error);
+      alert('❌ حدث خطأ في حذف الأغنية');
     }
   };
 
@@ -203,6 +272,7 @@ const AdminSongsManager = () => {
     if (previewAudio) {
       previewAudio.pause();
       setPreviewAudio(null);
+      if (previewAudio.src === audioUrl) return;
     }
     const audio = new Audio(audioUrl);
     audio.play();
@@ -210,40 +280,51 @@ const AdminSongsManager = () => {
     audio.onended = () => setPreviewAudio(null);
   };
 
+  // ========== FILTERING ==========
   const filteredArtists = artists.filter(a => 
-    a.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (a.nameAr && a.nameAr.includes(searchTerm)) ||
-    (a.nameEn && a.nameEn.toLowerCase().includes(searchTerm.toLowerCase()))
+    a.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (a.name_ar && a.name_ar.includes(searchTerm)) ||
+    (a.name_en && a.name_en.toLowerCase().includes(searchTerm.toLowerCase()))
   );
 
-  const artistSongs = selectedArtist ? songs.filter(s => s.artistId === selectedArtist.id) : [];
+  const artistSongs = selectedArtist 
+    ? songs.filter(s => s.artist_id === selectedArtist.id) 
+    : [];
 
-  // الحصول على التصنيفات الفرعية المتاحة بناءً على التصنيف الرئيسي
-  const getAvailableSubGenres = () => {
-    if (!songForm.genre) return [];
-    return subGenres.filter(sg => sg.parent === songForm.genre);
-  };
+  // ========== LOADING ==========
+  if (loading) {
+    return (
+      <div className="flex justify-center items-center py-20">
+        <div className="text-center">
+          <div className="w-12 h-12 border-4 border-red-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-gray-400">جاري تحميل البيانات...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="bg-gray-900 rounded-xl p-6 border border-gray-800">
-      <div className="flex justify-between items-center mb-6">
-        <h2 className="text-2xl font-bold text-white flex items-center gap-2">
+    <div className="bg-gray-900 rounded-xl p-4 sm:p-6 border border-gray-800">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-6">
+        <h2 className="text-xl sm:text-2xl font-bold text-white flex items-center gap-2">
           <FaHeadphones className="text-purple-400" /> إدارة الأغاني والفنانين
+          <span className="text-sm text-gray-500 font-normal">({songs.length} أغنية - {artists.length} فنان)</span>
         </h2>
         <button 
           onClick={() => { 
             setEditingArtist(null); 
-            setArtistForm({ name: '', nameAr: '', nameEn: '', country: '', genre: '', image: '', bio: '', songsCount: 0 }); 
+            setArtistForm({ name: '', nameAr: '', nameEn: '', country: '', genre: '', image: '', bio: '' }); 
             setShowArtistModal(true); 
           }} 
-          className="bg-red-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-red-700 transition"
+          className="bg-red-600 text-white px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg flex items-center gap-2 hover:bg-red-700 transition text-sm sm:text-base"
         >
           <FaPlus /> إضافة فنان
         </button>
       </div>
 
       <div className="grid md:grid-cols-3 gap-6">
-        {/* قائمة الفنانين */}
+        {/* ====== قائمة الفنانين ====== */}
         <div className="bg-gray-800 rounded-xl p-4">
           <div className="flex items-center gap-2 mb-3">
             <FaUser className="text-purple-400" />
@@ -263,7 +344,7 @@ const AdminSongsManager = () => {
           
           <div className="space-y-2 max-h-96 overflow-y-auto">
             {filteredArtists.length === 0 ? (
-              <p className="text-gray-500 text-center py-4">لا توجد فنانين</p>
+              <p className="text-gray-500 text-center py-4 text-sm">لا توجد فنانين</p>
             ) : (
               filteredArtists.map(artist => (
                 <div 
@@ -271,32 +352,41 @@ const AdminSongsManager = () => {
                   className={`flex items-center justify-between p-2 rounded-lg cursor-pointer transition ${selectedArtist?.id === artist.id ? 'bg-red-600/20 border-r-2 border-red-500' : 'hover:bg-gray-700'}`} 
                   onClick={() => setSelectedArtist(artist)}
                 >
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-1 min-w-0">
                     {artist.image ? (
-                      <img src={artist.image} alt={artist.name} className="w-8 h-8 rounded-full object-cover" />
+                      <img src={artist.image} alt={artist.name} className="w-8 h-8 rounded-full object-cover flex-shrink-0" />
                     ) : (
-                      <div className="w-8 h-8 rounded-full bg-purple-600/30 flex items-center justify-center">
+                      <div className="w-8 h-8 rounded-full bg-purple-600/30 flex items-center justify-center flex-shrink-0">
                         <FaUser className="text-purple-400 text-sm" />
                       </div>
                     )}
-                    <div>
-                      <p className="text-white text-sm">{artist.name}</p>
+                    <div className="min-w-0">
+                      <p className="text-white text-sm truncate">{artist.name || artist.name_ar}</p>
                       <div className="flex items-center gap-1 text-gray-500 text-xs">
                         <span>{getCountryLabel(artist.country)}</span>
                         <span>•</span>
-                        <span>{artist.songsCount || 0} أغنية</span>
+                        <span>{songs.filter(s => s.artist_id === artist.id).length || 0} أغنية</span>
                       </div>
                     </div>
                   </div>
-                  <div className="flex gap-1">
+                  <div className="flex gap-1 flex-shrink-0">
                     <button 
                       onClick={(e) => { 
                         e.stopPropagation(); 
                         setEditingArtist(artist); 
-                        setArtistForm(artist); 
+                        setArtistForm({
+                          name: artist.name || '',
+                          nameAr: artist.name_ar || '',
+                          nameEn: artist.name_en || '',
+                          country: artist.country || '',
+                          genre: artist.genre || '',
+                          image: artist.image || '',
+                          bio: artist.bio || ''
+                        }); 
                         setShowArtistModal(true); 
                       }} 
-                      className="text-blue-400 hover:text-blue-300"
+                      className="text-blue-400 hover:text-blue-300 p-1"
+                      title="تعديل"
                     >
                       <FaEdit size={14} />
                     </button>
@@ -305,7 +395,8 @@ const AdminSongsManager = () => {
                         e.stopPropagation(); 
                         handleDeleteArtist(artist.id); 
                       }} 
-                      className="text-red-400 hover:text-red-300"
+                      className="text-red-400 hover:text-red-300 p-1"
+                      title="حذف"
                     >
                       <FaTrash size={14} />
                     </button>
@@ -316,12 +407,12 @@ const AdminSongsManager = () => {
           </div>
         </div>
 
-        {/* قائمة الأغاني */}
+        {/* ====== قائمة الأغاني ====== */}
         <div className="md:col-span-2 bg-gray-800 rounded-xl p-4">
           {selectedArtist ? (
             <>
-              <div className="flex justify-between items-center mb-3">
-                <div className="flex items-center gap-2">
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-4">
+                <div className="flex items-center gap-3">
                   {selectedArtist.image ? (
                     <img src={selectedArtist.image} alt={selectedArtist.name} className="w-10 h-10 rounded-full object-cover" />
                   ) : (
@@ -330,17 +421,24 @@ const AdminSongsManager = () => {
                     </div>
                   )}
                   <div>
-                    <h3 className="text-white font-bold">{selectedArtist.name}</h3>
-                    <p className="text-gray-500 text-xs">{getCountryLabel(selectedArtist.country)} • {artistSongs.length} أغنية</p>
+                    <h3 className="text-white font-bold">{selectedArtist.name || selectedArtist.name_ar}</h3>
+                    <p className="text-gray-500 text-xs">
+                      {getCountryLabel(selectedArtist.country)} • {artistSongs.length} أغنية
+                      {selectedArtist.genre && ` • ${getGenreLabel(selectedArtist.genre)}`}
+                    </p>
                   </div>
                 </div>
                 <button 
                   onClick={() => { 
                     setEditingSong(null); 
-                    setSongForm({ title: '', titleAr: '', titleEn: '', duration: '', audioUrl: '', coverImage: '', lyrics: '', year: new Date().getFullYear(), genre: '', subGenre: '', plays: 0 }); 
+                    setSongForm({ 
+                      title: '', titleAr: '', titleEn: '', duration: '', 
+                      audioUrl: '', coverImage: '', lyrics: '', 
+                      year: new Date().getFullYear(), genre: '', subGenre: '', plays: 0 
+                    }); 
                     setShowSongModal(true); 
                   }} 
-                  className="bg-green-600 text-white px-3 py-1 rounded-lg text-sm flex items-center gap-1 hover:bg-green-700 transition"
+                  className="bg-green-600 text-white px-3 py-1.5 rounded-lg text-sm flex items-center gap-1 hover:bg-green-700 transition flex-shrink-0"
                 >
                   <FaPlus size={12} /> إضافة أغنية
                 </button>
@@ -348,46 +446,68 @@ const AdminSongsManager = () => {
               
               <div className="space-y-2 max-h-96 overflow-y-auto">
                 {artistSongs.length === 0 ? (
-                  <p className="text-gray-500 text-center py-8">لا توجد أغاني لهذا الفنان</p>
+                  <div className="text-center py-8 text-gray-500">
+                    <FaMusic className="text-4xl mx-auto mb-2 opacity-50" />
+                    <p>لا توجد أغاني لهذا الفنان</p>
+                  </div>
                 ) : (
                   artistSongs.map(song => (
                     <div key={song.id} className="flex items-center justify-between p-2 bg-gray-700/30 rounded-lg hover:bg-gray-700/50 transition">
-                      <div className="flex items-center gap-3">
-                        {song.coverImage ? (
-                          <img src={song.coverImage} alt={song.title} className="w-10 h-10 object-cover rounded" />
+                      <div className="flex items-center gap-3 flex-1 min-w-0">
+                        {song.cover_image ? (
+                          <img src={song.cover_image} alt={song.title} className="w-10 h-10 object-cover rounded flex-shrink-0" />
                         ) : (
-                          <div className="w-10 h-10 rounded bg-purple-600/20 flex items-center justify-center">
+                          <div className="w-10 h-10 rounded bg-purple-600/20 flex items-center justify-center flex-shrink-0">
                             <FaMusic className="text-purple-400" />
                           </div>
                         )}
-                        <div>
-                          <p className="text-white text-sm font-medium">{song.title}</p>
-                          <p className="text-gray-500 text-xs">{song.duration} • {getGenreLabel(song.genre)} {song.subGenre && `• ${song.subGenre}`} • {song.year}</p>
+                        <div className="min-w-0">
+                          <p className="text-white text-sm font-medium truncate">{song.title || song.title_ar}</p>
+                          <div className="flex flex-wrap items-center gap-1 text-gray-500 text-xs">
+                            {song.duration && <span><FaClock className="inline mr-1" size={10} />{song.duration}</span>}
+                            {song.genre && <span>• {getGenreLabel(song.genre)}</span>}
+                            {song.year && <span>• {song.year}</span>}
+                            {song.plays > 0 && <span>• <FaChartLine className="inline mr-1" size={10} />{song.plays}</span>}
+                          </div>
                         </div>
                       </div>
-                      <div className="flex gap-2">
+                      <div className="flex gap-1 flex-shrink-0">
                         <button 
-                          onClick={() => playPreview(song.audioUrl)} 
-                          className="p-2 bg-purple-600 rounded-lg text-white hover:bg-purple-700 transition"
-                          title="معاينة"
+                          onClick={() => playPreview(song.audio_url)} 
+                          className={`p-1.5 rounded-lg transition ${previewAudio?.src === song.audio_url ? 'bg-red-600 text-white' : 'bg-purple-600 text-white hover:bg-purple-700'}`}
+                          title={previewAudio?.src === song.audio_url ? 'إيقاف' : 'معاينة'}
                         >
-                          {previewAudio ? <FaStop size={12} /> : <FaPlay size={12} />}
+                          {previewAudio?.src === song.audio_url ? <FaStop size={12} /> : <FaPlay size={12} />}
                         </button>
                         <button 
                           onClick={() => { 
                             setEditingSong(song); 
-                            setSongForm(song); 
+                            setSongForm({
+                              title: song.title || '',
+                              titleAr: song.title_ar || '',
+                              titleEn: song.title_en || '',
+                              duration: song.duration || '',
+                              audioUrl: song.audio_url || '',
+                              coverImage: song.cover_image || '',
+                              lyrics: song.lyrics || '',
+                              year: song.year || new Date().getFullYear(),
+                              genre: song.genre || '',
+                              subGenre: song.sub_genre || '',
+                              plays: song.plays || 0
+                            }); 
                             setShowSongModal(true); 
                           }} 
-                          className="text-blue-400 hover:text-blue-300"
+                          className="text-blue-400 hover:text-blue-300 p-1"
+                          title="تعديل"
                         >
-                          <FaEdit />
+                          <FaEdit size={14} />
                         </button>
                         <button 
                           onClick={() => handleDeleteSong(song.id)} 
-                          className="text-red-400 hover:text-red-300"
+                          className="text-red-400 hover:text-red-300 p-1"
+                          title="حذف"
                         >
-                          <FaTrash />
+                          <FaTrash size={14} />
                         </button>
                       </div>
                     </div>
@@ -404,28 +524,28 @@ const AdminSongsManager = () => {
         </div>
       </div>
 
-      {/* مودال إضافة/تعديل فنان */}
+      {/* ====== مودال إضافة/تعديل فنان ====== */}
       {showArtistModal && (
         <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50" onClick={() => setShowArtistModal(false)}>
-          <div className="bg-gray-900 rounded-2xl max-w-md w-full" onClick={(e) => e.stopPropagation()}>
-            <div className="p-4 border-b border-gray-800 flex justify-between items-center">
+          <div className="bg-gray-900 rounded-2xl max-w-md w-full max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+            <div className="sticky top-0 bg-gray-900 p-4 border-b border-gray-800 flex justify-between items-center">
               <h3 className="text-white text-xl font-bold">{editingArtist ? 'تعديل' : 'إضافة'} فنان</h3>
               <button onClick={() => setShowArtistModal(false)} className="text-gray-400 hover:text-white text-2xl">&times;</button>
             </div>
-            <div className="p-5 space-y-3 max-h-[70vh] overflow-y-auto">
+            <div className="p-5 space-y-3">
               <input 
                 type="text" 
                 placeholder="اسم الفنان (عربي)" 
                 value={artistForm.nameAr} 
                 onChange={(e) => setArtistForm({...artistForm, nameAr: e.target.value})} 
-                className="w-full bg-gray-800 border border-gray-700 rounded-lg p-2 text-white" 
+                className="w-full bg-gray-800 border border-gray-700 rounded-lg p-2 text-white text-sm" 
               />
               <input 
                 type="text" 
-                placeholder="اسم الفنان" 
+                placeholder="اسم الفنان *" 
                 value={artistForm.name} 
                 onChange={(e) => setArtistForm({...artistForm, name: e.target.value})} 
-                className="w-full bg-gray-800 border border-gray-700 rounded-lg p-2 text-white" 
+                className="w-full bg-gray-800 border border-gray-700 rounded-lg p-2 text-white text-sm" 
                 required 
               />
               <input 
@@ -433,10 +553,9 @@ const AdminSongsManager = () => {
                 placeholder="اسم الفنان (إنجليزي)" 
                 value={artistForm.nameEn} 
                 onChange={(e) => setArtistForm({...artistForm, nameEn: e.target.value})} 
-                className="w-full bg-gray-800 border border-gray-700 rounded-lg p-2 text-white" 
+                className="w-full bg-gray-800 border border-gray-700 rounded-lg p-2 text-white text-sm" 
               />
               
-              {/* حقل البلد */}
               <div>
                 <label className="block text-gray-400 text-sm mb-1 flex items-center gap-2">
                   <FaGlobe className="text-purple-400" /> البلد / المنطقة
@@ -444,7 +563,7 @@ const AdminSongsManager = () => {
                 <select 
                   value={artistForm.country} 
                   onChange={(e) => setArtistForm({...artistForm, country: e.target.value})} 
-                  className="w-full bg-gray-800 border border-gray-700 rounded-lg p-2 text-white"
+                  className="w-full bg-gray-800 border border-gray-700 rounded-lg p-2 text-white text-sm"
                 >
                   <option value="">اختر البلد</option>
                   {countries.map(c => (
@@ -453,13 +572,12 @@ const AdminSongsManager = () => {
                 </select>
               </div>
 
-              {/* حقل التصنيف الموسيقي للفنان */}
               <div>
                 <label className="block text-gray-400 text-sm mb-1">التصنيف الموسيقي</label>
                 <select 
                   value={artistForm.genre} 
                   onChange={(e) => setArtistForm({...artistForm, genre: e.target.value})} 
-                  className="w-full bg-gray-800 border border-gray-700 rounded-lg p-2 text-white"
+                  className="w-full bg-gray-800 border border-gray-700 rounded-lg p-2 text-white text-sm"
                 >
                   <option value="">اختر التصنيف</option>
                   {musicGenres.map(g => (
@@ -473,20 +591,28 @@ const AdminSongsManager = () => {
                 value={artistForm.bio} 
                 onChange={(e) => setArtistForm({...artistForm, bio: e.target.value})} 
                 rows="3" 
-                className="w-full bg-gray-800 border border-gray-700 rounded-lg p-2 text-white resize-none"
+                className="w-full bg-gray-800 border border-gray-700 rounded-lg p-2 text-white text-sm resize-none"
               />
               <input 
                 type="url" 
                 placeholder="رابط صورة الفنان" 
                 value={artistForm.image} 
                 onChange={(e) => setArtistForm({...artistForm, image: e.target.value})} 
-                className="w-full bg-gray-800 border border-gray-700 rounded-lg p-2 text-white" 
+                className="w-full bg-gray-800 border border-gray-700 rounded-lg p-2 text-white text-sm" 
               />
               <div className="flex gap-3 pt-3">
-                <button onClick={handleArtistSubmit} className="flex-1 bg-red-600 text-white py-2 rounded-lg hover:bg-red-700 transition">
-                  <FaSave className="inline ml-1" /> حفظ
+                <button 
+                  onClick={handleArtistSubmit} 
+                  disabled={saving}
+                  className="flex-1 bg-red-600 text-white py-2 rounded-lg hover:bg-red-700 transition text-sm disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {saving ? <FaSyncAlt className="animate-spin" /> : <FaSave />}
+                  {saving ? 'جاري الحفظ...' : 'حفظ'}
                 </button>
-                <button onClick={() => setShowArtistModal(false)} className="flex-1 bg-gray-700 text-white py-2 rounded-lg hover:bg-gray-600 transition">
+                <button 
+                  onClick={() => setShowArtistModal(false)} 
+                  className="flex-1 bg-gray-700 text-white py-2 rounded-lg hover:bg-gray-600 transition text-sm"
+                >
                   <FaTimes className="inline ml-1" /> إلغاء
                 </button>
               </div>
@@ -495,12 +621,14 @@ const AdminSongsManager = () => {
         </div>
       )}
 
-      {/* مودال إضافة/تعديل أغنية */}
+      {/* ====== مودال إضافة/تعديل أغنية ====== */}
       {showSongModal && selectedArtist && (
         <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50" onClick={() => setShowSongModal(false)}>
           <div className="bg-gray-900 rounded-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-            <div className="p-4 border-b border-gray-800 flex justify-between items-center sticky top-0 bg-gray-900">
-              <h3 className="text-white text-xl font-bold">{editingSong ? 'تعديل' : 'إضافة'} أغنية - {selectedArtist.name}</h3>
+            <div className="sticky top-0 bg-gray-900 p-4 border-b border-gray-800 flex justify-between items-center">
+              <h3 className="text-white text-xl font-bold">
+                {editingSong ? 'تعديل' : 'إضافة'} أغنية - {selectedArtist.name || selectedArtist.name_ar}
+              </h3>
               <button onClick={() => setShowSongModal(false)} className="text-gray-400 hover:text-white text-2xl">&times;</button>
             </div>
             <div className="p-5 space-y-3">
@@ -509,14 +637,14 @@ const AdminSongsManager = () => {
                 placeholder="عنوان الأغنية (عربي)" 
                 value={songForm.titleAr} 
                 onChange={(e) => setSongForm({...songForm, titleAr: e.target.value})} 
-                className="w-full bg-gray-800 border border-gray-700 rounded-lg p-2 text-white" 
+                className="w-full bg-gray-800 border border-gray-700 rounded-lg p-2 text-white text-sm" 
               />
               <input 
                 type="text" 
-                placeholder="عنوان الأغنية" 
+                placeholder="عنوان الأغنية *" 
                 value={songForm.title} 
                 onChange={(e) => setSongForm({...songForm, title: e.target.value})} 
-                className="w-full bg-gray-800 border border-gray-700 rounded-lg p-2 text-white" 
+                className="w-full bg-gray-800 border border-gray-700 rounded-lg p-2 text-white text-sm" 
                 required 
               />
               <input 
@@ -524,26 +652,26 @@ const AdminSongsManager = () => {
                 placeholder="عنوان الأغنية (إنجليزي)" 
                 value={songForm.titleEn} 
                 onChange={(e) => setSongForm({...songForm, titleEn: e.target.value})} 
-                className="w-full bg-gray-800 border border-gray-700 rounded-lg p-2 text-white" 
+                className="w-full bg-gray-800 border border-gray-700 rounded-lg p-2 text-white text-sm" 
               />
+              
               <div className="grid grid-cols-2 gap-3">
                 <input 
                   type="text" 
                   placeholder="المدة (مثال: 3:45)" 
                   value={songForm.duration} 
                   onChange={(e) => setSongForm({...songForm, duration: e.target.value})} 
-                  className="bg-gray-800 border border-gray-700 rounded-lg p-2 text-white" 
+                  className="bg-gray-800 border border-gray-700 rounded-lg p-2 text-white text-sm" 
                 />
                 <input 
                   type="number" 
                   placeholder="السنة" 
                   value={songForm.year} 
                   onChange={(e) => setSongForm({...songForm, year: e.target.value})} 
-                  className="bg-gray-800 border border-gray-700 rounded-lg p-2 text-white" 
+                  className="bg-gray-800 border border-gray-700 rounded-lg p-2 text-white text-sm" 
                 />
               </div>
 
-              {/* حقل التصنيف الموسيقي للأغنية */}
               <div>
                 <label className="block text-gray-400 text-sm mb-1">التصنيف الموسيقي</label>
                 <select 
@@ -551,7 +679,7 @@ const AdminSongsManager = () => {
                   onChange={(e) => {
                     setSongForm({...songForm, genre: e.target.value, subGenre: ''});
                   }} 
-                  className="w-full bg-gray-800 border border-gray-700 rounded-lg p-2 text-white"
+                  className="w-full bg-gray-800 border border-gray-700 rounded-lg p-2 text-white text-sm"
                 >
                   <option value="">اختر التصنيف</option>
                   {musicGenres.map(g => (
@@ -560,14 +688,13 @@ const AdminSongsManager = () => {
                 </select>
               </div>
 
-              {/* حقل التصنيف الفرعي (يظهر فقط عند اختيار تصنيف رئيسي) */}
               {songForm.genre && getAvailableSubGenres().length > 0 && (
                 <div>
                   <label className="block text-gray-400 text-sm mb-1">التصنيف الفرعي (اختياري)</label>
                   <select 
                     value={songForm.subGenre} 
                     onChange={(e) => setSongForm({...songForm, subGenre: e.target.value})} 
-                    className="w-full bg-gray-800 border border-gray-700 rounded-lg p-2 text-white"
+                    className="w-full bg-gray-800 border border-gray-700 rounded-lg p-2 text-white text-sm"
                   >
                     <option value="">بدون تصنيف فرعي</option>
                     {getAvailableSubGenres().map(sg => (
@@ -579,10 +706,10 @@ const AdminSongsManager = () => {
 
               <input 
                 type="url" 
-                placeholder="رابط الأغنية (MP3)" 
+                placeholder="رابط الأغنية (MP3) *" 
                 value={songForm.audioUrl} 
                 onChange={(e) => setSongForm({...songForm, audioUrl: e.target.value})} 
-                className="w-full bg-gray-800 border border-gray-700 rounded-lg p-2 text-white" 
+                className="w-full bg-gray-800 border border-gray-700 rounded-lg p-2 text-white text-sm" 
                 required 
               />
               <input 
@@ -590,20 +717,28 @@ const AdminSongsManager = () => {
                 placeholder="رابط صورة الغلاف" 
                 value={songForm.coverImage} 
                 onChange={(e) => setSongForm({...songForm, coverImage: e.target.value})} 
-                className="w-full bg-gray-800 border border-gray-700 rounded-lg p-2 text-white" 
+                className="w-full bg-gray-800 border border-gray-700 rounded-lg p-2 text-white text-sm" 
               />
               <textarea 
                 placeholder="كلمات الأغنية" 
                 value={songForm.lyrics} 
                 onChange={(e) => setSongForm({...songForm, lyrics: e.target.value})} 
                 rows="5" 
-                className="w-full bg-gray-800 border border-gray-700 rounded-lg p-2 text-white resize-none"
+                className="w-full bg-gray-800 border border-gray-700 rounded-lg p-2 text-white text-sm resize-none"
               />
               <div className="flex gap-3 pt-3">
-                <button onClick={handleSongSubmit} className="flex-1 bg-red-600 text-white py-2 rounded-lg hover:bg-red-700 transition">
-                  <FaSave className="inline ml-1" /> حفظ
+                <button 
+                  onClick={handleSongSubmit} 
+                  disabled={saving}
+                  className="flex-1 bg-red-600 text-white py-2 rounded-lg hover:bg-red-700 transition text-sm disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {saving ? <FaSyncAlt className="animate-spin" /> : <FaSave />}
+                  {saving ? 'جاري الحفظ...' : 'حفظ'}
                 </button>
-                <button onClick={() => setShowSongModal(false)} className="flex-1 bg-gray-700 text-white py-2 rounded-lg hover:bg-gray-600 transition">
+                <button 
+                  onClick={() => setShowSongModal(false)} 
+                  className="flex-1 bg-gray-700 text-white py-2 rounded-lg hover:bg-gray-600 transition text-sm"
+                >
                   <FaTimes className="inline ml-1" /> إلغاء
                 </button>
               </div>
