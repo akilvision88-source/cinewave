@@ -4,6 +4,9 @@
   "private": true,
   "proxy": "http://192.168.11.88:5000",
   "dependencies": {
+    "@capacitor/android": "^8.4.0",
+    "@capacitor/cli": "^8.4.0",
+    "@capacitor/core": "^8.4.0",
     "@paypal/react-paypal-js": "^9.2.0",
     "@stripe/react-stripe-js": "^6.4.0",
     "@stripe/stripe-js": "^9.7.0",
@@ -14,6 +17,7 @@
     "dotenv": "^16.6.1",
     "express": "^4.22.2",
     "framer-motion": "^10.16.0",
+    "hls.js": "^1.6.16",
     "jsonwebtoken": "^9.0.3",
     "jspdf": "^4.2.1",
     "jspdf-autotable": "^5.0.8",
