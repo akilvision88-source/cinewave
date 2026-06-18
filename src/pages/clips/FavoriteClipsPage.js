@@ -1,299 +1,176 @@
 // src/pages/clips/FavoriteClipsPage.js
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useLanguage } from '../../context/LanguageContext';
-import { FaHeart, FaRegHeart, FaList, FaTimes, FaShare, FaTrash, FaChevronLeft, FaStar, FaRegStar, FaClock, FaCalendarAlt, FaPlay, FaUser } from 'react-icons/fa';
-import VideoPlayer from '../../components/VideoPlayer';
-import { clipsAPI, artistsAPI } from '../../services/api';
+import { 
+  FaHeart, FaRegHeart, FaList, FaTimes, FaShare, FaTrash, 
+  FaChevronLeft, FaStar, FaRegStar, FaClock, FaCalendarAlt, 
+  FaPlay, FaUser, FaVideo, FaMusic, FaEye, FaBookmark 
+} from 'react-icons/fa';
+import { clipsAPI } from '../../services/api';
 
 const FavoriteClipsPage = () => {
-  const { language, t } = useLanguage();
-  const [favoriteClips, setFavoriteClips] = useState([]);
-  const [artists, setArtists] = useState([]);
-  const [currentClip, setCurrentClip] = useState(null);
-  const [currentIndex, setCurrentIndex] = useState(0);
-  const [likedClips, setLikedClips] = useState([]);
-  const [showPlaylist, setShowPlaylist] = useState(false);
-  const [showToast, setShowToast] = useState(false);
-  const [toastMessage, setToastMessage] = useState('');
+  const [favorites, setFavorites] = useState([]);
   const [loading, setLoading] = useState(true);
-  
-  const toastTimeout = useRef(null);
-
-  const showNotification = (message) => {
-    setToastMessage(message);
-    setShowToast(true);
-    if (toastTimeout.current) clearTimeout(toastTimeout.current);
-    toastTimeout.current = setTimeout(() => {
-      setShowToast(false);
-    }, 2000);
-  };
-
-  const formatYouTubeUrl = (url) => {
-    if (!url) return url;
-    
-    if (url.includes('youtube.com') || url.includes('youtu.be')) {
-      let videoId = null;
-      if (url.includes('youtu.be')) {
-        videoId = url.split('youtu.be/')[1]?.split('?')[0];
-      } else if (url.includes('watch?v=')) {
-        videoId = url.split('watch?v=')[1]?.split('&')[0];
-      } else if (url.includes('embed/')) {
-        videoId = url.split('embed/')[1]?.split('?')[0];
-      }
-      if (videoId) {
-        videoId = videoId.replace(/[^a-zA-Z0-9_-]/g, '');
-        return `https://www.youtube.com/watch?v=${videoId}`;
-      }
-    }
-    return url;
-  };
+  const [error, setError] = useState(null);
+  const [selectedClip, setSelectedClip] = useState(null);
+  const { t, language } = useLanguage();
 
   useEffect(() => {
-    const loadData = async () => {
-      setLoading(true);
-      try {
-        const [favoritesData, artistsData] = await Promise.all([
-          clipsAPI.getFavorites(),
-          artistsAPI.getAll()
-        ]);
-        
-        setArtists(artistsData);
-        
-        const formattedClips = favoritesData.map(clip => ({
-          ...clip,
-          videoUrl: formatYouTubeUrl(clip.videoUrl),
-          artistName: artistsData.find(a => a.id === clip.artistId)?.name || 'فنان',
-          artistImage: artistsData.find(a => a.id === clip.artistId)?.image || ''
-        }));
-        setFavoriteClips(formattedClips);
-        if (formattedClips.length > 0) {
-          setCurrentClip(formattedClips[0]);
-        }
-        
-        const savedLikes = localStorage.getItem('cinewave_liked_clips');
-        if (savedLikes) setLikedClips(JSON.parse(savedLikes));
-      } catch (error) {
-        console.error('خطأ في تحميل الكليبات المفضلة:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
-    loadData();
+    loadFavorites();
   }, []);
 
-  useEffect(() => {
-    localStorage.setItem('cinewave_liked_clips', JSON.stringify(likedClips));
-  }, [likedClips]);
-
-  const toggleLike = async (clipId) => {
+  const loadFavorites = async () => {
+    setLoading(true);
     try {
-      const data = await clipsAPI.toggleLike(clipId);
-      setLikedClips(data.likes);
-      showNotification(likedClips.includes(clipId) ? 'تم إزالة الإعجاب' : 'تم الإعجاب');
+      const data = await clipsAPI.getFavorites();
+      setFavorites(data);
+      console.log('✅ تم تحميل المفضلة:', data.length);
     } catch (error) {
-      console.error('خطأ في تغيير الإعجاب:', error);
+      console.error('❌ خطأ في تحميل المفضلة:', error);
+      setError(error.message);
+    } finally {
+      setLoading(false);
     }
   };
 
   const removeFromFavorites = async (clipId) => {
+    if (!window.confirm('هل أنت متأكد من إزالة هذا الكليب من المفضلة؟')) return;
     try {
       await clipsAPI.toggleFavorite(clipId);
-      const updatedFavorites = favoriteClips.filter(c => c.id !== clipId);
-      setFavoriteClips(updatedFavorites);
-      if (currentClip?.id === clipId && updatedFavorites.length > 0) {
-        setCurrentClip(updatedFavorites[0]);
-        setCurrentIndex(0);
-      } else if (updatedFavorites.length === 0) {
-        setCurrentClip(null);
-      }
-      showNotification('تم إزالة الكليب من المفضلة');
+      await loadFavorites();
     } catch (error) {
-      console.error('خطأ في إزالة من المفضلة:', error);
+      console.error('❌ خطأ في إزالة المفضلة:', error);
     }
-  };
-
-  const playClip = (clip, index) => {
-    const formattedUrl = formatYouTubeUrl(clip.videoUrl);
-    const formattedClip = { ...clip, videoUrl: formattedUrl };
-    setCurrentClip(formattedClip);
-    setCurrentIndex(index);
-  };
-
-  const nextClip = () => {
-    if (favoriteClips.length === 0) return;
-    let nextIndex = (currentIndex + 1) % favoriteClips.length;
-    const nextClipData = favoriteClips[nextIndex];
-    const formattedUrl = formatYouTubeUrl(nextClipData.videoUrl);
-    setCurrentClip({ ...nextClipData, videoUrl: formattedUrl });
-    setCurrentIndex(nextIndex);
-  };
-
-  const prevClip = () => {
-    if (favoriteClips.length === 0) return;
-    let prevIndex = (currentIndex - 1 + favoriteClips.length) % favoriteClips.length;
-    const prevClipData = favoriteClips[prevIndex];
-    const formattedUrl = formatYouTubeUrl(prevClipData.videoUrl);
-    setCurrentClip({ ...prevClipData, videoUrl: formattedUrl });
-    setCurrentIndex(prevIndex);
   };
 
   if (loading) {
     return (
-      <div className="flex justify-center items-center h-screen bg-black">
-        <div className="w-12 h-12 border-4 border-red-600 border-t-transparent rounded-full animate-spin"></div>
+      <div className="flex justify-center items-center h-64">
+        <div className="text-center">
+          <div className="w-12 h-12 border-4 border-purple-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-gray-400">جاري تحميل المفضلة...</p>
+        </div>
       </div>
     );
   }
 
-  if (favoriteClips.length === 0) {
+  if (error) {
     return (
-      <div className="min-h-screen bg-black flex items-center justify-center">
-        <div className="text-center">
-          <div className="text-6xl mb-4">⭐</div>
-          <h1 className="text-2xl font-bold text-white mb-2">لا توجد كليبات مفضلة</h1>
-          <p className="text-gray-400 mb-6">أضف كليباتك المفضلة من صفحة الفنانين</p>
-          <Link to="/clips" className="bg-red-600 text-white px-6 py-2 rounded-lg hover:bg-red-700 transition">
-            استكشف الكليبات
-          </Link>
-        </div>
+      <div className="text-center py-12 text-red-400">
+        <p>حدث خطأ: {error}</p>
+        <button onClick={loadFavorites} className="mt-4 bg-purple-600 text-white px-4 py-2 rounded-lg">
+          إعادة المحاولة
+        </button>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-black">
-      {showToast && (
-        <div className="fixed top-20 left-1/2 transform -translate-x-1/2 z-50 bg-gray-800 text-white px-6 py-3 rounded-xl shadow-lg animate-fadeIn">
-          {toastMessage}
-        </div>
-      )}
-
-      {/* Header - ممتد */}
-      <div className="bg-gradient-to-r from-gray-900 to-black sticky top-0 z-20 border-b border-gray-800">
-        <div className="w-full px-3 sm:px-4 md:px-6 lg:px-8 py-4 flex justify-between items-center">
-          <Link to="/clips" className="flex items-center gap-2 text-gray-400 hover:text-white transition">
-            <FaChevronLeft /> العودة للفنانين
+    <div className="min-h-screen bg-black p-4 md:p-6">
+      <div className="max-w-7xl mx-auto">
+        {/* Header */}
+        <div className="flex items-center gap-3 mb-6">
+          <Link to="/clips" className="text-gray-400 hover:text-white transition">
+            <FaChevronLeft className="text-xl" />
           </Link>
-          <div className="flex items-center gap-2">
-            <FaStar className="text-yellow-500" />
-            <h1 className="text-white font-bold text-lg">كليباتي المفضلة</h1>
-            <span className="bg-gray-800 text-gray-400 text-xs px-2 py-1 rounded-full">{favoriteClips.length}</span>
-          </div>
+          <h1 className="text-2xl font-bold text-white flex items-center gap-2">
+            <FaHeart className="text-red-500" />
+            {t('favoriteClips') || 'الكليبات المفضلة'}
+          </h1>
+          <span className="text-gray-500 text-sm">({favorites.length})</span>
         </div>
-      </div>
 
-      {/* Main Content - ممتد */}
-      <div className="w-full px-3 sm:px-4 md:px-6 lg:px-8 py-6">
-        <div className="grid lg:grid-cols-3 gap-6">
-          {/* Video Player Section */}
-          <div className="lg:col-span-2">
-            {currentClip && (
-              <VideoPlayer
-                videoUrl={currentClip.videoUrl}
-                title={currentClip.title}
-                artist={currentClip.artistName}
-                isLiked={likedClips.includes(currentClip.id)}
-                isFavorite={true}
-                onLike={() => toggleLike(currentClip.id)}
-                onNext={nextClip}
-                onPrev={prevClip}
-                hasNext={favoriteClips.length > 1}
-                hasPrev={favoriteClips.length > 1}
-                autoPlay={true}
-              />
-            )}
-            
-            {currentClip && (
-              <div className="mt-4">
-                <div className="flex justify-between items-start flex-wrap gap-3">
-                  <div>
-                    <h2 className="text-white text-xl font-bold">{currentClip.title}</h2>
-                    <div className="flex items-center gap-2 mt-1">
-                      <img src={currentClip.artistImage} alt={currentClip.artistName} className="w-5 h-5 rounded-full object-cover" />
-                      <Link to={`/clips/artist/${currentClip.artistId}`} className="text-gray-400 hover:text-red-500 text-sm">
-                        {currentClip.artistName}
-                      </Link>
-                    </div>
+        {favorites.length === 0 ? (
+          <div className="text-center py-16 text-gray-500">
+            <FaHeart className="text-6xl mx-auto mb-4 opacity-30" />
+            <p className="text-lg">لا توجد كليبات مفضلة</p>
+            <Link to="/clips" className="text-purple-400 hover:text-purple-300 transition">
+              استكشف الكليبات
+            </Link>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+            {favorites.map((clip) => (
+              <div key={clip.id} className="bg-gray-900 rounded-xl overflow-hidden border border-gray-800 hover:border-purple-500/50 transition group">
+                {/* Thumbnail */}
+                <div className="relative aspect-video bg-gray-800">
+                  <img 
+                    src={clip.thumbnail || 'https://via.placeholder.com/320x180/1a1a2e/ffffff?text=🎵'} 
+                    alt={clip.title} 
+                    className="w-full h-full object-cover"
+                    onError={(e) => {
+                      e.target.src = 'https://via.placeholder.com/320x180/1a1a2e/ffffff?text=🎵';
+                    }}
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent opacity-0 group-hover:opacity-100 transition flex items-center justify-center">
+                    <button 
+                      onClick={() => setSelectedClip(clip)}
+                      className="w-12 h-12 bg-purple-600 rounded-full flex items-center justify-center hover:bg-purple-700 transition transform hover:scale-110"
+                    >
+                      <FaPlay className="text-white text-xl ml-1" />
+                    </button>
                   </div>
-                  <button onClick={() => removeFromFavorites(currentClip.id)} className="flex items-center gap-2 px-4 py-2 bg-gray-800 rounded-full hover:bg-red-600/20 transition">
-                    <FaTrash className="text-red-400" />
-                    <span>إزالة من المفضلة</span>
+                  <button 
+                    onClick={() => removeFromFavorites(clip.id)}
+                    className="absolute top-2 right-2 p-2 bg-black/60 rounded-full hover:bg-red-600 transition opacity-0 group-hover:opacity-100"
+                    title="إزالة من المفضلة"
+                  >
+                    <FaTrash className="text-red-400 text-sm" />
                   </button>
                 </div>
-                <div className="flex items-center gap-4 text-gray-500 text-sm mt-3">
-                  <span className="flex items-center gap-1"><FaPlay /> {currentClip.views?.toLocaleString() || '0'}</span>
-                  <span className="flex items-center gap-1"><FaHeart /> {currentClip.likes?.toLocaleString() || '0'}</span>
-                  <span className="flex items-center gap-1"><FaClock /> {currentClip.duration}</span>
-                  <span className="flex items-center gap-1"><FaCalendarAlt /> {currentClip.year}</span>
+
+                {/* Info */}
+                <div className="p-3">
+                  <h3 className="text-white font-medium truncate">{clip.title || clip.title_ar}</h3>
+                  <div className="flex items-center gap-2 mt-1">
+                    {clip.artist_image ? (
+                      <img src={clip.artist_image} alt={clip.artist_name} className="w-5 h-5 rounded-full object-cover" />
+                    ) : (
+                      <FaUser className="text-gray-500 text-xs" />
+                    )}
+                    <p className="text-gray-400 text-sm truncate">{clip.artist_name || 'فنان'}</p>
+                  </div>
+                  <div className="flex items-center gap-2 mt-2 text-gray-500 text-xs">
+                    <span className="flex items-center gap-1"><FaEye size={10} /> {clip.views || 0}</span>
+                    <span className="flex items-center gap-1"><FaHeart size={10} /> {clip.likes || 0}</span>
+                    <span className="flex items-center gap-1"><FaClock size={10} /> {clip.duration || '0:00'}</span>
+                  </div>
                 </div>
               </div>
-            )}
+            ))}
           </div>
-          
-          {/* Playlist Section */}
-          <div className="bg-gray-900/50 rounded-xl border border-gray-800 overflow-hidden">
-            <div className="p-3 bg-gray-800 border-b border-gray-700 flex justify-between items-center">
-              <h3 className="text-white font-semibold flex items-center gap-2">
-                <FaStar className="text-yellow-500" /> قائمة التشغيل ({favoriteClips.length})
-              </h3>
-              <button className="text-gray-400 hover:text-white"><FaShare /></button>
-            </div>
-            <div className="max-h-[500px] overflow-y-auto">
-              {favoriteClips.map((clip, idx) => (
-                <div key={clip.id} onClick={() => playClip(clip, idx)} className={`flex items-center gap-3 p-3 cursor-pointer transition hover:bg-gray-800 ${currentClip?.id === clip.id ? 'bg-red-600/20 border-r-2 border-red-500' : ''}`}>
-                  <div className="relative w-16 h-12 rounded overflow-hidden flex-shrink-0">
-                    <img src={clip.thumbnail} alt={clip.title} className="w-full h-full object-cover" onError={(e) => { e.target.src = 'https://via.placeholder.com/320x180?text=No+Image'; }} />
-                    {currentClip?.id === clip.id && <div className="absolute inset-0 bg-red-600/30 flex items-center justify-center"><FaPlay className="text-white text-xs" /></div>}
-                  </div>
-                  <div className="flex-1">
-                    <p className="text-white text-sm font-medium line-clamp-1">{clip.title}</p>
-                    <div className="flex items-center gap-1 mt-1">
-                      <img src={clip.artistImage} alt={clip.artistName} className="w-3 h-3 rounded-full" />
-                      <p className="text-gray-500 text-xs">{clip.artistName}</p>
-                    </div>
-                    <p className="text-gray-500 text-xs">{clip.duration}</p>
-                  </div>
-                  <div className="flex gap-1">
-                    <button onClick={(e) => { e.stopPropagation(); toggleLike(clip.id); }} className="p-1">
-                      {likedClips.includes(clip.id) ? <FaHeart className="text-red-500 text-sm" /> : <FaRegHeart className="text-gray-400 text-sm" />}
-                    </button>
-                    <button onClick={(e) => { e.stopPropagation(); removeFromFavorites(clip.id); }} className="p-2 hover:bg-gray-700 rounded-lg transition">
-                      <FaTrash className="text-red-400 text-xs" />
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
+        )}
       </div>
 
-      {/* Floating Playlist Toggle for Mobile */}
-      {!showPlaylist && favoriteClips.length > 0 && (
-        <button onClick={() => setShowPlaylist(true)} className="fixed bottom-20 right-4 z-30 bg-red-600 w-12 h-12 rounded-full flex items-center justify-center shadow-lg lg:hidden">
-          <FaList className="text-white" />
-        </button>
-      )}
-
-      {showPlaylist && (
-        <div className="fixed inset-0 bg-black/90 z-40 lg:hidden" onClick={() => setShowPlaylist(false)}>
-          <div className="absolute bottom-0 left-0 right-0 bg-gray-900 rounded-t-2xl max-h-[70vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-            <div className="p-4 border-b border-gray-800 flex justify-between items-center sticky top-0 bg-gray-900">
-              <h3 className="text-white font-bold">قائمة التشغيل</h3>
-              <button onClick={() => setShowPlaylist(false)} className="text-gray-400"><FaTimes /></button>
+      {/* Player Modal */}
+      {selectedClip && (
+        <div className="fixed inset-0 bg-black/90 flex items-center justify-center p-4 z-50" onClick={() => setSelectedClip(null)}>
+          <div className="bg-gray-900 rounded-2xl max-w-2xl w-full" onClick={(e) => e.stopPropagation()}>
+            <div className="p-4 border-b border-gray-800 flex justify-between items-center">
+              <h3 className="text-white font-bold">{selectedClip.title}</h3>
+              <button onClick={() => setSelectedClip(null)} className="text-gray-400 hover:text-white">
+                <FaTimes className="text-xl" />
+              </button>
             </div>
-            <div className="p-3">
-              {favoriteClips.map((clip, idx) => (
-                <div key={clip.id} onClick={() => { playClip(clip, idx); setShowPlaylist(false); }} className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer transition hover:bg-gray-800 ${currentClip?.id === clip.id ? 'bg-red-600/20' : ''}`}>
-                  <img src={clip.thumbnail} alt={clip.title} className="w-12 h-10 object-cover rounded" onError={(e) => { e.target.src = 'https://via.placeholder.com/320x180?text=No+Image'; }} />
-                  <div className="flex-1">
-                    <p className="text-white text-sm">{clip.title}</p>
-                    <p className="text-gray-500 text-xs">{clip.artistName}</p>
-                  </div>
-                  <FaPlay className="text-gray-400 text-xs" />
+            <div className="p-4">
+              <video 
+                src={selectedClip.video_url} 
+                controls 
+                autoPlay 
+                className="w-full rounded-lg"
+                poster={selectedClip.thumbnail}
+              />
+              <div className="mt-3 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <FaUser className="text-gray-400" />
+                  <span className="text-gray-300">{selectedClip.artist_name}</span>
                 </div>
-              ))}
+                <div className="flex items-center gap-3 text-gray-500 text-sm">
+                  <span><FaEye className="inline mr-1" /> {selectedClip.views || 0}</span>
+                  <span><FaHeart className="inline mr-1 text-red-400" /> {selectedClip.likes || 0}</span>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -302,4 +179,5 @@ const FavoriteClipsPage = () => {
   );
 };
 
+// ✅ تأكد من وجود هذا السطر في نهاية الملف
 export default FavoriteClipsPage;

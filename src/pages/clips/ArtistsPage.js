@@ -1,5 +1,5 @@
-// src/pages/clips/ArtistsPage.js - نسخة معدلة لعرض الأحدث أولاً
-import React, { useState, useEffect } from 'react';
+// src/pages/clips/ArtistsPage.js - نسخة كاملة مع تحديث المفضلة
+import React, { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { useLanguage } from '../../context/LanguageContext';
 import { FaSearch, FaMusic, FaMicrophoneAlt, FaPlay, FaStar, FaTh, FaList, FaChevronLeft, FaChevronRight } from 'react-icons/fa';
@@ -36,6 +36,14 @@ const ArtistsPage = () => {
     localStorage.setItem('artists_current_page', page);
   };
 
+  // دالة لتحديث عدد المفضلة
+  const updateFavoriteCount = useCallback(() => {
+    const savedFavorites = localStorage.getItem('cinewave_favorite_clips');
+    const count = savedFavorites ? JSON.parse(savedFavorites).length : 0;
+    setFavoriteClipsCount(count);
+    console.log('📊 تحديث عدد المفضلة:', count);
+  }, []);
+
   useEffect(() => {
     const handleResize = () => {
       setIsMobile(window.innerWidth < 768);
@@ -64,16 +72,33 @@ const ArtistsPage = () => {
     };
     loadArtists();
     
-    const loadFavorites = async () => {
-      try {
-        const favorites = await clipsAPI.getFavorites();
-        setFavoriteClipsCount(favorites.length);
-      } catch (error) {
-        console.error('Error loading favorites:', error);
+    // تحديث عدد المفضلة عند التحميل
+    updateFavoriteCount();
+    
+    // الاستماع للتغييرات في localStorage (من صفحات أخرى)
+    const handleStorageChange = (e) => {
+      if (e.key === 'cinewave_favorite_clips') {
+        updateFavoriteCount();
       }
     };
-    loadFavorites();
-  }, []);
+    
+    // الاستماع للحدث المخصص
+    const handleFavoritesUpdate = () => {
+      updateFavoriteCount();
+    };
+    
+    window.addEventListener('storage', handleStorageChange);
+    window.addEventListener('favoritesUpdated', handleFavoritesUpdate);
+    
+    // تحديث كل 3 ثواني (حل احتياطي)
+    const interval = setInterval(updateFavoriteCount, 3000);
+    
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('favoritesUpdated', handleFavoritesUpdate);
+      clearInterval(interval);
+    };
+  }, [updateFavoriteCount]);
 
   // فلترة الفنانين
   useEffect(() => {
@@ -194,8 +219,14 @@ const ArtistsPage = () => {
           
           <div className={`flex ${isMobile ? 'justify-center' : 'justify-end'}`}>
             <div className="flex gap-1 bg-gray-800 rounded-lg p-0.5">
-              <button onClick={() => handleViewModeChange('grid')} className={`px-2 py-1 rounded-md transition text-xs flex items-center gap-1 ${viewMode === 'grid' ? 'bg-red-600 text-white' : 'text-gray-400 hover:bg-gray-700'}`}><FaTh size={12} /><span className="hidden sm:inline">شبكة</span></button>
-              <button onClick={() => handleViewModeChange('list')} className={`px-2 py-1 rounded-md transition text-xs flex items-center gap-1 ${viewMode === 'list' ? 'bg-red-600 text-white' : 'text-gray-400 hover:bg-gray-700'}`}><FaList size={12} /><span className="hidden sm:inline">قائمة</span></button>
+              <button onClick={() => handleViewModeChange('grid')} className={`px-2 py-1 rounded-md transition text-xs flex items-center gap-1 ${viewMode === 'grid' ? 'bg-red-600 text-white' : 'text-gray-400 hover:bg-gray-700'}`}>
+                <FaTh size={12} />
+                <span className="hidden sm:inline">شبكة</span>
+              </button>
+              <button onClick={() => handleViewModeChange('list')} className={`px-2 py-1 rounded-md transition text-xs flex items-center gap-1 ${viewMode === 'list' ? 'bg-red-600 text-white' : 'text-gray-400 hover:bg-gray-700'}`}>
+                <FaList size={12} />
+                <span className="hidden sm:inline">قائمة</span>
+              </button>
             </div>
           </div>
         </div>
@@ -222,9 +253,17 @@ const ArtistsPage = () => {
 
         {totalPages > 1 && (
           <div className="flex justify-center items-center gap-1 mt-6 mb-3">
-            <button onClick={goToPrevPage} disabled={currentPage === 1} className={`p-1.5 rounded-lg transition ${currentPage === 1 ? 'bg-gray-800 text-gray-600 cursor-not-allowed' : 'bg-gray-800 text-white hover:bg-red-600'}`}><FaChevronRight size={12} /></button>
-            {getPageNumbers().map(number => (<button key={number} onClick={() => goToPage(number)} className={`w-6 h-6 rounded-lg transition text-[11px] ${currentPage === number ? 'bg-red-600 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'}`}>{number}</button>))}
-            <button onClick={goToNextPage} disabled={currentPage === totalPages} className={`p-1.5 rounded-lg transition ${currentPage === totalPages ? 'bg-gray-800 text-gray-600 cursor-not-allowed' : 'bg-gray-800 text-white hover:bg-red-600'}`}><FaChevronLeft size={12} /></button>
+            <button onClick={goToPrevPage} disabled={currentPage === 1} className={`p-1.5 rounded-lg transition ${currentPage === 1 ? 'bg-gray-800 text-gray-600 cursor-not-allowed' : 'bg-gray-800 text-white hover:bg-red-600'}`}>
+              <FaChevronRight size={12} />
+            </button>
+            {getPageNumbers().map(number => (
+              <button key={number} onClick={() => goToPage(number)} className={`w-6 h-6 rounded-lg transition text-[11px] ${currentPage === number ? 'bg-red-600 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'}`}>
+                {number}
+              </button>
+            ))}
+            <button onClick={goToNextPage} disabled={currentPage === totalPages} className={`p-1.5 rounded-lg transition ${currentPage === totalPages ? 'bg-gray-800 text-gray-600 cursor-not-allowed' : 'bg-gray-800 text-white hover:bg-red-600'}`}>
+              <FaChevronLeft size={12} />
+            </button>
           </div>
         )}
       </div>
@@ -232,19 +271,30 @@ const ArtistsPage = () => {
   );
 };
 
+// Artist Card Component (Grid View)
 const ArtistCard = ({ artist, getGenreLabel }) => {
   return (
     <Link to={`/clips/artist/${artist.id}`} className="group">
       <div className="relative bg-gray-900 rounded-xl overflow-hidden transition-transform duration-300 hover:-translate-y-2">
-        <img src={artist.image || 'https://via.placeholder.com/300x300?text=Artist'} alt={artist.name} className="w-full aspect-square object-cover group-hover:scale-105 transition duration-500" loading="lazy" onError={(e) => { e.target.src = 'https://via.placeholder.com/300x300?text=Artist'; }} />
+        <img 
+          src={artist.image || 'https://via.placeholder.com/300x300?text=Artist'} 
+          alt={artist.name} 
+          className="w-full aspect-square object-cover group-hover:scale-105 transition duration-500" 
+          loading="lazy" 
+          onError={(e) => { e.target.src = 'https://via.placeholder.com/300x300?text=Artist'; }} 
+        />
         <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-          <div className="w-10 h-10 bg-red-600 rounded-full flex items-center justify-center"><FaPlay className="text-white text-sm ml-0.5" /></div>
+          <div className="w-10 h-10 bg-red-600 rounded-full flex items-center justify-center">
+            <FaPlay className="text-white text-sm ml-0.5" />
+          </div>
         </div>
         <div className="absolute bottom-0 left-0 right-0 p-2 bg-gradient-to-t from-black to-transparent">
           <h3 className="text-white font-bold text-sm line-clamp-1">{artist.name}</h3>
           <div className="flex items-center gap-2 text-gray-400 text-[10px] mt-0.5">
-            <FaMusic className="text-[9px]" /><span>{artist.clips_count || 0} كليب</span>
-            <FaMicrophoneAlt className="text-[9px] ml-1" /><span>{getGenreLabel(artist.genre)}</span>
+            <FaMusic className="text-[9px]" />
+            <span>{artist.songs_count || 0} كليب</span>
+            <FaMicrophoneAlt className="text-[9px] ml-1" />
+            <span>{getGenreLabel(artist.genre)}</span>
           </div>
         </div>
       </div>
@@ -252,19 +302,35 @@ const ArtistCard = ({ artist, getGenreLabel }) => {
   );
 };
 
+// Artist List Item Component
 const ArtistListItem = ({ artist, getGenreLabel }) => {
   return (
     <Link to={`/clips/artist/${artist.id}`} className="block group">
       <div className="flex gap-3 bg-gray-900/50 rounded-lg p-2 hover:bg-gray-800 transition border border-gray-800 hover:border-red-500/50">
-        <img src={artist.image || 'https://via.placeholder.com/48x48?text=Artist'} alt={artist.name} className="w-12 h-12 rounded-full object-cover" onError={(e) => { e.target.src = 'https://via.placeholder.com/48x48?text=Artist'; }} />
+        <img 
+          src={artist.image || 'https://via.placeholder.com/48x48?text=Artist'} 
+          alt={artist.name} 
+          className="w-12 h-12 rounded-full object-cover" 
+          onError={(e) => { e.target.src = 'https://via.placeholder.com/48x48?text=Artist'; }} 
+        />
         <div className="flex-1">
           <h3 className="text-white font-semibold text-sm group-hover:text-red-500 transition">{artist.name}</h3>
           <div className="flex flex-wrap items-center gap-2 text-[10px] text-gray-400 mt-1">
-            <span className="flex items-center gap-1"><FaMusic className="text-[9px]" /><span>{artist.clips_count || 0} كليب</span></span>
-            <span className="flex items-center gap-1"><FaMicrophoneAlt className="text-[9px]" /><span>{getGenreLabel(artist.genre)}</span></span>
+            <span className="flex items-center gap-1">
+              <FaMusic className="text-[9px]" />
+              <span>{artist.songs_count || 0} كليب</span>
+            </span>
+            <span className="flex items-center gap-1">
+              <FaMicrophoneAlt className="text-[9px]" />
+              <span>{getGenreLabel(artist.genre)}</span>
+            </span>
           </div>
           {artist.bio && <p className="text-gray-500 text-[10px] mt-1 line-clamp-1">{artist.bio}</p>}
-          <div className="flex items-center gap-2 mt-2"><button className="bg-red-600 text-white px-2 py-0.5 rounded text-[10px] hover:bg-red-700 transition">مشاهدة الكليبات</button></div>
+          <div className="flex items-center gap-2 mt-2">
+            <button className="bg-red-600 text-white px-2 py-0.5 rounded text-[10px] hover:bg-red-700 transition">
+              مشاهدة الكليبات
+            </button>
+          </div>
         </div>
       </div>
     </Link>
