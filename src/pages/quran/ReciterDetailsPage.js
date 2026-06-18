@@ -1,9 +1,10 @@
+// src/pages/quran/ReciterDetailsPage.js - نسخة كاملة مع الاتصال بقاعدة البيانات
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useLanguage } from '../../context/LanguageContext';
-import { FaPlay, FaPause, FaHeart, FaRegHeart, FaList, FaTimes, FaShare, FaChevronLeft, FaStar, FaRegStar, FaClock, FaHeadphones } from 'react-icons/fa';
+import { FaPlay, FaPause, FaHeart, FaRegHeart, FaList, FaTimes, FaShare, FaChevronLeft, FaStar, FaRegStar, FaClock, FaHeadphones, FaBookmark } from 'react-icons/fa';
 import VideoPlayer from '../../components/VideoPlayer';
-import { recitersAPI } from '../../services/api';
+import { recitersAPI, watchlistAPI } from '../../services/api';
 
 const ReciterDetailsPage = () => {
   const { reciterId } = useParams();
@@ -17,19 +18,29 @@ const ReciterDetailsPage = () => {
   const [showToast, setShowToast] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
   const [loading, setLoading] = useState(true);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isToggling, setIsToggling] = useState(false);
   
   const toastTimeout = useRef(null);
 
-  const showNotification = (message) => {
+  // ========== التحقق من حالة تسجيل الدخول ==========
+  useEffect(() => {
+    const token = localStorage.getItem('token');
+    const user = localStorage.getItem('user');
+    setIsAuthenticated(!!token || !!user);
+  }, []);
+
+  // ========== دالة عرض الإشعار ==========
+  const showNotification = (message, type = 'success') => {
     setToastMessage(message);
     setShowToast(true);
     if (toastTimeout.current) clearTimeout(toastTimeout.current);
     toastTimeout.current = setTimeout(() => {
       setShowToast(false);
-    }, 2000);
+    }, 2500);
   };
 
-  // تنسيق رابط YouTube للقرآن
+  // ========== تنسيق رابط YouTube ==========
   const formatYouTubeUrl = (url) => {
     if (!url) return url;
     
@@ -53,7 +64,7 @@ const ReciterDetailsPage = () => {
     return url;
   };
 
-  // تحميل بيانات القارئ والسور
+  // ========== تحميل بيانات القارئ والسور ==========
   useEffect(() => {
     const loadData = async () => {
       setLoading(true);
@@ -88,6 +99,7 @@ const ReciterDetailsPage = () => {
     loadFavorites();
   }, [reciterId]);
 
+  // ========== تبديل المفضلة ==========
   const toggleFavoriteReciter = async () => {
     try {
       const data = await recitersAPI.toggleFavorite(reciterId);
@@ -95,14 +107,51 @@ const ReciterDetailsPage = () => {
       showNotification(favoriteReciters.includes(parseInt(reciterId)) ? 'تم إزالة القارئ من المفضلين' : 'تم إضافة القارئ إلى المفضلين');
     } catch (error) {
       console.error('خطأ في تغيير المفضلة:', error);
+      showNotification('❌ حدث خطأ، يرجى المحاولة مرة أخرى', 'error');
     }
   };
 
+  // ========== إضافة/إزالة من قائمة المشاهدة ==========
+  const toggleWatchlist = async (surah, e) => {
+    if (e) e.stopPropagation();
+    
+    if (!isAuthenticated) {
+      window.location.href = '/login';
+      return;
+    }
+    
+    if (isToggling) return;
+    setIsToggling(true);
+    
+    try {
+      const itemId = surah.id;
+      const itemType = 'quran';
+      
+      // التحقق من وجود السورة في القائمة
+      const result = await watchlistAPI.isInWatchlist(itemId, itemType);
+      
+      if (result.exists) {
+        await watchlistAPI.removeFromWatchlist(itemId, itemType);
+        showNotification('✅ تم إزالة السورة من قائمة المشاهدة');
+      } else {
+        await watchlistAPI.addToWatchlist(itemId, itemType);
+        showNotification('✅ تم إضافة السورة إلى قائمة المشاهدة');
+      }
+    } catch (error) {
+      console.error('❌ خطأ في تحديث قائمة المشاهدة:', error);
+      showNotification('❌ حدث خطأ، يرجى المحاولة مرة أخرى', 'error');
+    } finally {
+      setIsToggling(false);
+    }
+  };
+
+  // ========== تشغيل السورة ==========
   const playSurah = (surah, index) => {
     setCurrentSurah(surah);
     setCurrentIndex(index);
   };
 
+  // ========== السورة التالية ==========
   const nextSurah = () => {
     if (surahs.length === 0) return;
     let nextIndex = (currentIndex + 1) % surahs.length;
@@ -110,6 +159,7 @@ const ReciterDetailsPage = () => {
     setCurrentSurah(surahs[nextIndex]);
   };
 
+  // ========== السورة السابقة ==========
   const prevSurah = () => {
     if (surahs.length === 0) return;
     let prevIndex = (currentIndex - 1 + surahs.length) % surahs.length;
@@ -117,6 +167,7 @@ const ReciterDetailsPage = () => {
     setCurrentSurah(surahs[prevIndex]);
   };
 
+  // ========== LOADING ==========
   if (loading) {
     return (
       <div className="flex justify-center items-center h-screen bg-black">
@@ -125,14 +176,19 @@ const ReciterDetailsPage = () => {
     );
   }
   
+  // ========== RECITER NOT FOUND ==========
   if (!reciter) {
     return (
-      <div className="flex justify-center items-center h-screen text-white">
-        القارئ غير موجود
+      <div className="flex justify-center items-center h-screen text-white bg-black">
+        <div className="text-center">
+          <h2 className="text-2xl font-bold mb-2">القارئ غير موجود</h2>
+          <Link to="/quran" className="text-green-400 hover:text-green-300">العودة إلى القراء</Link>
+        </div>
       </div>
     );
   }
 
+  // ========== RENDER ==========
   return (
     <div className="min-h-screen bg-black">
       {showToast && (
@@ -141,7 +197,7 @@ const ReciterDetailsPage = () => {
         </div>
       )}
 
-      {/* Header - ممتد بالكامل */}
+      {/* ====== HEADER ====== */}
       <div className="bg-gradient-to-r from-gray-900 to-black sticky top-0 z-20 border-b border-gray-800">
         <div className="w-full px-3 sm:px-4 md:px-6 lg:px-8 py-4 flex justify-between items-center flex-wrap gap-3">
           <div className="flex items-center gap-3">
@@ -155,7 +211,14 @@ const ReciterDetailsPage = () => {
             </Link>
           </div>
           <div className="flex items-center gap-3">
-            <img src={reciter.image} alt={reciter.name} className="w-10 h-10 rounded-full object-cover" />
+            <img 
+              src={reciter.image} 
+              alt={reciter.name} 
+              className="w-10 h-10 rounded-full object-cover" 
+              onError={(e) => {
+                e.target.src = 'https://via.placeholder.com/40x40/1a1a2e/ffffff?text=🕌';
+              }}
+            />
             <div>
               <h1 className="text-white font-bold">{reciter.name}</h1>
               <p className="text-gray-500 text-xs">{reciter.country}</p>
@@ -164,10 +227,10 @@ const ReciterDetailsPage = () => {
         </div>
       </div>
 
-      {/* Main Content - ممتد بالكامل */}
+      {/* ====== MAIN CONTENT ====== */}
       <div className="w-full px-3 sm:px-4 md:px-6 lg:px-8 py-6">
         <div className="grid lg:grid-cols-3 gap-6">
-          {/* Audio Player Section */}
+          {/* ====== AUDIO PLAYER ====== */}
           <div className="lg:col-span-2">
             {currentSurah && (
               <div className="bg-gradient-to-br from-green-900/30 to-black rounded-xl p-4 sm:p-6 border border-green-500/30">
@@ -189,6 +252,18 @@ const ReciterDetailsPage = () => {
                   hasPrev={surahs.length > 1}
                   autoPlay={false}
                 />
+                
+                {/* ✅ زر إضافة إلى قائمة المشاهدة تحت المشغل */}
+                <div className="mt-4 flex justify-center">
+                  <button 
+                    onClick={() => toggleWatchlist(currentSurah)} 
+                    disabled={isToggling}
+                    className="flex items-center gap-2 px-4 py-2 bg-purple-600/30 hover:bg-purple-600/50 rounded-full transition disabled:opacity-50 text-purple-300"
+                  >
+                    <FaBookmark className="text-sm" />
+                    <span>إضافة إلى قائمتي</span>
+                  </button>
+                </div>
               </div>
             )}
             
@@ -200,16 +275,26 @@ const ReciterDetailsPage = () => {
                     <h2 className="text-white text-lg sm:text-xl font-bold">سورة {currentSurah.name}</h2>
                     <p className="text-gray-400 text-sm">{reciter.name}</p>
                   </div>
-                  <button onClick={toggleFavoriteReciter} className="flex items-center gap-2 px-3 py-1.5 sm:px-4 sm:py-2 bg-gray-800 rounded-full hover:bg-gray-700 transition text-sm sm:text-base">
-                    {favoriteReciters.includes(parseInt(reciterId)) ? <FaStar className="text-green-500 text-sm sm:text-base" /> : <FaRegStar className="text-sm sm:text-base" />}
-                    <span>{favoriteReciters.includes(parseInt(reciterId)) ? 'مفضل' : 'أضف للمفضلين'}</span>
-                  </button>
+                  <div className="flex gap-2">
+                    <button onClick={toggleFavoriteReciter} className="flex items-center gap-2 px-3 py-1.5 sm:px-4 sm:py-2 bg-gray-800 rounded-full hover:bg-gray-700 transition text-sm sm:text-base">
+                      {favoriteReciters.includes(parseInt(reciterId)) ? <FaStar className="text-green-500 text-sm sm:text-base" /> : <FaRegStar className="text-sm sm:text-base" />}
+                      <span>{favoriteReciters.includes(parseInt(reciterId)) ? 'مفضل' : 'أضف للمفضلين'}</span>
+                    </button>
+                    <button 
+                      onClick={() => toggleWatchlist(currentSurah)} 
+                      disabled={isToggling}
+                      className="flex items-center gap-2 px-3 py-1.5 sm:px-4 sm:py-2 bg-purple-600/30 hover:bg-purple-600/50 rounded-full transition disabled:opacity-50 text-purple-300 text-sm sm:text-base"
+                    >
+                      <FaBookmark className="text-sm" />
+                      <span>قائمتي</span>
+                    </button>
+                  </div>
                 </div>
               </div>
             )}
           </div>
           
-          {/* Playlist Section - قائمة السور */}
+          {/* ====== PLAYLIST ====== */}
           <div className="bg-gray-900/50 rounded-xl border border-gray-800 overflow-hidden">
             <div className="p-3 bg-gray-800 border-b border-gray-700 flex justify-between items-center">
               <h3 className="text-white font-semibold flex items-center gap-2 text-sm sm:text-base">
@@ -219,7 +304,11 @@ const ReciterDetailsPage = () => {
             </div>
             <div className="max-h-[500px] overflow-y-auto">
               {surahs.map((surah, idx) => (
-                <div key={surah.id} onClick={() => playSurah(surah, idx)} className={`flex items-center gap-3 p-3 cursor-pointer transition hover:bg-gray-800 ${currentSurah?.id === surah.id ? 'bg-green-600/20 border-r-2 border-green-500' : ''}`}>
+                <div 
+                  key={surah.id} 
+                  onClick={() => playSurah(surah, idx)} 
+                  className={`flex items-center gap-3 p-3 cursor-pointer transition hover:bg-gray-800 ${currentSurah?.id === surah.id ? 'bg-green-600/20 border-r-2 border-green-500' : ''}`}
+                >
                   <div className="w-8 h-8 bg-green-600/20 rounded-full flex items-center justify-center">
                     <span className="text-green-400 text-xs sm:text-sm font-bold">{surah.number}</span>
                   </div>
@@ -227,7 +316,18 @@ const ReciterDetailsPage = () => {
                     <p className="text-white text-xs sm:text-sm font-medium">{surah.name}</p>
                     <p className="text-gray-500 text-[10px] sm:text-xs">{surah.duration} • {surah.verses} آية</p>
                   </div>
-                  <FaPlay className={`text-[10px] sm:text-xs ${currentSurah?.id === surah.id ? 'text-green-400' : 'text-gray-400'}`} />
+                  <div className="flex items-center gap-1">
+                    {/* ✅ زر إضافة إلى قائمة المشاهدة في قائمة السور */}
+                    <button 
+                      onClick={(e) => toggleWatchlist(surah, e)} 
+                      disabled={isToggling}
+                      className="p-1 text-purple-400 hover:text-purple-300 transition disabled:opacity-50"
+                      title="إضافة إلى قائمتي"
+                    >
+                      <FaBookmark className="text-[10px]" />
+                    </button>
+                    <FaPlay className={`text-[10px] sm:text-xs ${currentSurah?.id === surah.id ? 'text-green-400' : 'text-gray-400'}`} />
+                  </div>
                 </div>
               ))}
             </div>
