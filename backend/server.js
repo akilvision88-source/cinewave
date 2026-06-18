@@ -54,6 +54,24 @@ const verifyToken = (req, res, next) => {
 // ========== إنشاء الجداول إذا لم تكن موجودة ==========
 const initTables = async () => {
     try {
+        // جدول المستخدمين
+        await db.execute(`
+            CREATE TABLE IF NOT EXISTS users (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                name VARCHAR(100) NOT NULL,
+                email VARCHAR(100) NOT NULL UNIQUE,
+                password VARCHAR(255) NOT NULL,
+                role ENUM('admin', 'premium', 'user') DEFAULT 'user',
+                plan ENUM('free', 'standard', 'premium') DEFAULT 'free',
+                status ENUM('active', 'banned') DEFAULT 'active',
+                avatar TEXT DEFAULT NULL,
+                watch_history INT DEFAULT 0,
+                watchlist TEXT DEFAULT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        `);
+
+        // جدول المفضلة
         await db.execute(`
             CREATE TABLE IF NOT EXISTS user_favorites (
                 id INT AUTO_INCREMENT PRIMARY KEY,
@@ -66,6 +84,7 @@ const initTables = async () => {
             )
         `);
         
+        // جدول الإعجابات
         await db.execute(`
             CREATE TABLE IF NOT EXISTS user_likes (
                 id INT AUTO_INCREMENT PRIMARY KEY,
@@ -78,6 +97,7 @@ const initTables = async () => {
             )
         `);
         
+        // جدول سجل المشاهدة
         await db.execute(`
             CREATE TABLE IF NOT EXISTS watch_history (
                 id INT AUTO_INCREMENT PRIMARY KEY,
@@ -91,14 +111,93 @@ const initTables = async () => {
                 FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
             )
         `);
-        
-        console.log('✅ جداول المفضلة والإعجابات وسجل المشاهدة جاهزة');
+
+        // جدول خطط الاشتراك
+        await db.execute(`
+            CREATE TABLE IF NOT EXISTS subscription_plans (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                name VARCHAR(50) NOT NULL,
+                name_ar VARCHAR(50) DEFAULT NULL,
+                description TEXT DEFAULT NULL,
+                description_ar TEXT DEFAULT NULL,
+                price DECIMAL(10,2) NOT NULL,
+                currency VARCHAR(10) DEFAULT 'USD',
+                duration ENUM('month', 'year', 'life') DEFAULT 'month',
+                features JSON DEFAULT NULL,
+                is_active TINYINT(1) DEFAULT 1,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        `);
+
+        // جدول اشتراكات المستخدمين
+        await db.execute(`
+            CREATE TABLE IF NOT EXISTS user_subscriptions (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                user_id INT NOT NULL,
+                plan_id INT NOT NULL,
+                status ENUM('active', 'expired', 'cancelled') DEFAULT 'active',
+                start_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+                end_date DATETIME DEFAULT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+                FOREIGN KEY (plan_id) REFERENCES subscription_plans(id) ON DELETE CASCADE
+            )
+        `);
+
+        // إضافة خطط اشتراك افتراضية إذا لم تكن موجودة
+        await db.execute(`
+            INSERT IGNORE INTO subscription_plans (name, name_ar, price, duration, features, is_active) VALUES
+            ('free', 'مجاني', 0, 'life', '["مشاهدة بجودة 480p", "إعلانات", "دعم محدود"]', 1),
+            ('standard', 'ستاندرد', 9.99, 'month', '["مشاهدة بجودة 1080p", "بدون إعلانات", "تحميل للمشاهدة", "دعم 24/7"]', 1),
+            ('premium', 'بريميوم', 19.99, 'month', '["مشاهدة بجودة 4K", "بدون إعلانات", "تحميل غير محدود", "محتوى حصري", "دعم 24/7"]', 1)
+        `);
+
+        console.log('✅ جميع الجداول جاهزة');
     } catch (error) {
-        console.error('خطأ في إنشاء الجداول:', error);
+        console.error('❌ خطأ في إنشاء الجداول:', error);
     }
 };
 
 initTables();
+
+// ============================================================
+// 🔧 التأكد من وجود جدول watchlist
+// ============================================================
+const ensureWatchlistTable = async () => {
+    try {
+        const [tables] = await db.execute("SHOW TABLES LIKE 'watchlist'");
+        if (tables.length === 0) {
+            console.log('⚠️ جدول watchlist غير موجود، يتم إنشاؤه...');
+            await db.execute(`
+                CREATE TABLE watchlist (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    user_id INT NOT NULL,
+                    item_type ENUM('movie', 'series', 'song', 'clip', 'animation', 'quran') NOT NULL,
+                    item_id INT NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE KEY unique_watchlist (user_id, item_type, item_id)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+            `);
+            
+            try {
+                await db.execute(`
+                    ALTER TABLE watchlist 
+                    ADD FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+                `);
+            } catch (fkError) {
+                console.log('⚠️ لا يمكن إضافة المفتاح الخارجي (قد يكون جدول users غير موجود)');
+            }
+            
+            console.log('✅ تم إنشاء جدول watchlist بنجاح');
+        } else {
+            console.log('✅ جدول watchlist موجود');
+        }
+    } catch (error) {
+        console.error('❌ خطأ في إنشاء جدول watchlist:', error);
+    }
+};
+
+ensureWatchlistTable();
 
 // ========== AUTH API ==========
 app.post('/api/auth/register', async (req, res) => {
@@ -383,7 +482,6 @@ app.get('/api/series/:id', async (req, res) => {
     }
 });
 
-// ✅ إضافة مسلسل جديد مع دعم الحلقات (محسّن)
 app.post('/api/series', verifyToken, async (req, res) => {
     if (req.userRole !== 'admin') return res.status(403).json({ message: 'غير مصرح' });
     
@@ -399,12 +497,10 @@ app.post('/api/series', verifyToken, async (req, res) => {
             episodes
         } = req.body;
         
-        // التحقق من وجود العنوان
         if (!title && !title_ar && !title_fr) {
             return res.status(400).json({ message: 'العنوان مطلوب' });
         }
         
-        // إدراج المسلسل
         const [result] = await db.execute(
             `INSERT INTO series (
                 title, title_ar, title_fr, 
@@ -427,7 +523,6 @@ app.post('/api/series', verifyToken, async (req, res) => {
         const seriesId = result.insertId;
         console.log(`✅ تم إضافة المسلسل بالمعرف: ${seriesId}`);
         
-        // ✅ إضافة الحلقات إذا وجدت
         if (episodes && Array.isArray(episodes) && episodes.length > 0) {
             console.log(`📺 جاري إضافة ${episodes.length} حلقة...`);
             
@@ -459,7 +554,6 @@ app.post('/api/series', verifyToken, async (req, res) => {
             console.log('⚠️ لا توجد حلقات مضافة لهذا المسلسل');
         }
         
-        // جلب المسلسل مع الحلقات للتأكيد
         const [newSeries] = await db.execute('SELECT * FROM series WHERE id = ?', [seriesId]);
         const [newEpisodes] = await db.execute('SELECT * FROM episodes WHERE series_id = ?', [seriesId]);
         
@@ -476,7 +570,132 @@ app.post('/api/series', verifyToken, async (req, res) => {
     }
 });
 
-// إضافة حلقة لمسلسل (منفصلة)
+app.put('/api/series/:id', verifyToken, async (req, res) => {
+    if (req.userRole !== 'admin') return res.status(403).json({ message: 'غير مصرح' });
+    try {
+        const { 
+            title, title_ar, title_fr, 
+            description, description_ar, description_fr,
+            poster, backdrop, rating, year, genre, 
+            country, director, cast, category, seasons,
+            episodes
+        } = req.body;
+        
+        console.log(`🔄 تحديث المسلسل ${req.params.id}:`);
+        console.log(`📺 عدد الحلقات المرسلة: ${episodes?.length || 0}`);
+        
+        await db.execute(
+            `UPDATE series SET 
+                title=?, title_ar=?, title_fr=?, 
+                description=?, description_ar=?, description_fr=?,
+                poster=?, backdrop=?, 
+                rating=?, year=?, genre=?, 
+                country=?, director=?, cast=?, 
+                category=?, seasons=?
+             WHERE id=?`,
+            [
+                toSqlValue(title), toSqlValue(title_ar), toSqlValue(title_fr),
+                toSqlValue(description), toSqlValue(description_ar), toSqlValue(description_fr),
+                toSqlValue(poster), toSqlValue(backdrop),
+                rating || 0, year || new Date().getFullYear(),
+                toSqlValue(genre), toSqlValue(country),
+                toSqlValue(director), toSqlValue(cast), 
+                toSqlValue(category), seasons || 1,
+                req.params.id
+            ]
+        );
+        
+        if (episodes && Array.isArray(episodes)) {
+            console.log(`📺 جاري تحديث حلقات المسلسل ${req.params.id}...`);
+            
+            const [existingEpisodes] = await db.execute(
+                'SELECT id, episode_num FROM episodes WHERE series_id = ?',
+                [req.params.id]
+            );
+            
+            console.log(`📋 الحلقات الموجودة: ${existingEpisodes.length}`);
+            
+            const existingEpisodeNums = existingEpisodes.map(ep => ep.episode_num);
+            const newEpisodeNums = episodes.map(ep => parseInt(ep.episode_num));
+            
+            console.log(`📋 أرقام الحلقات الموجودة:`, existingEpisodeNums);
+            console.log(`📋 أرقام الحلقات الجديدة:`, newEpisodeNums);
+            
+            for (const existing of existingEpisodes) {
+                if (!newEpisodeNums.includes(existing.episode_num)) {
+                    console.log(`   - حذف الحلقة ${existing.episode_num} (غير موجودة في التحديث)`);
+                    await db.execute('DELETE FROM episodes WHERE id = ?', [existing.id]);
+                }
+            }
+            
+            let addedCount = 0;
+            let updatedCount = 0;
+            
+            for (const ep of episodes) {
+                const [exists] = await db.execute(
+                    'SELECT id FROM episodes WHERE series_id = ? AND episode_num = ?',
+                    [req.params.id, parseInt(ep.episode_num)]
+                );
+                
+                if (exists.length > 0) {
+                    console.log(`   - تحديث الحلقة ${ep.episode_num}: ${ep.title}`);
+                    await db.execute(
+                        `UPDATE episodes SET 
+                            season_num=?, 
+                            title=?, title_ar=?, title_fr=?, 
+                            description=?, video_url=?, duration=?, thumbnail=?
+                         WHERE id=?`,
+                        [
+                            ep.season_num || 1,
+                            toSqlValue(ep.title), 
+                            toSqlValue(ep.title_ar), 
+                            toSqlValue(ep.title_fr),
+                            toSqlValue(ep.description), 
+                            toSqlValue(ep.video_url),
+                            toSqlValue(ep.duration), 
+                            toSqlValue(ep.thumbnail),
+                            exists[0].id
+                        ]
+                    );
+                    updatedCount++;
+                } else {
+                    console.log(`   - إضافة حلقة جديدة ${ep.episode_num}: ${ep.title}`);
+                    await db.execute(
+                        `INSERT INTO episodes (
+                            series_id, season_num, episode_num, 
+                            title, title_ar, title_fr, 
+                            description, video_url, duration, thumbnail, 
+                            created_at
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
+                        [
+                            req.params.id,
+                            ep.season_num || 1,
+                            parseInt(ep.episode_num),
+                            toSqlValue(ep.title), 
+                            toSqlValue(ep.title_ar), 
+                            toSqlValue(ep.title_fr),
+                            toSqlValue(ep.description), 
+                            toSqlValue(ep.video_url),
+                            toSqlValue(ep.duration), 
+                            toSqlValue(ep.thumbnail)
+                        ]
+                    );
+                    addedCount++;
+                }
+            }
+            
+            console.log(`✅ تم تحديث ${updatedCount} حلقة وإضافة ${addedCount} حلقة جديدة`);
+        } else {
+            console.log('⚠️ لا توجد حلقات مرسلة للتحديث');
+        }
+        
+        res.json({ message: 'تم التحديث بنجاح' });
+    } catch (error) {
+        console.error('❌ خطأ في تحديث المسلسل:', error);
+        res.status(500).json({ message: error.message });
+    }
+});
+
 app.post('/api/series/:seriesId/episodes', verifyToken, async (req, res) => {
     if (req.userRole !== 'admin') return res.status(403).json({ message: 'غير مصرح' });
     try {
@@ -495,28 +714,6 @@ app.post('/api/series/:seriesId/episodes', verifyToken, async (req, res) => {
         res.json({ id: result.insertId, message: 'تمت إضافة الحلقة' });
     } catch (error) {
         console.error('❌ خطأ في إضافة حلقة:', error);
-        res.status(500).json({ message: error.message });
-    }
-});
-
-app.put('/api/series/:id', verifyToken, async (req, res) => {
-    if (req.userRole !== 'admin') return res.status(403).json({ message: 'غير مصرح' });
-    try {
-        const { title, title_ar, title_fr, description, poster, backdrop, rating, year, genre, country, director, cast, category, seasons } = req.body;
-        await db.execute(
-            `UPDATE series SET title=?, title_ar=?, title_fr=?, description=?, poster=?, backdrop=?, rating=?, year=?, genre=?, country=?, director=?, cast=?, category=?, seasons=?
-             WHERE id=?`,
-            [
-                toSqlValue(title), toSqlValue(title_ar), toSqlValue(title_fr),
-                toSqlValue(description), toSqlValue(poster), toSqlValue(backdrop),
-                rating || 0, year || new Date().getFullYear(),
-                toSqlValue(genre), toSqlValue(country),
-                toSqlValue(director), toSqlValue(cast), toSqlValue(category),
-                seasons || 1, req.params.id
-            ]
-        );
-        res.json({ message: 'تم التحديث' });
-    } catch (error) {
         res.status(500).json({ message: error.message });
     }
 });
@@ -939,6 +1136,676 @@ app.delete('/api/reciters/:id', verifyToken, async (req, res) => {
     }
 });
 
+// ============================================================
+// ========== 📋 WATCHLIST API ==========
+// ============================================================
+
+// جلب قائمة المشاهدة للمستخدم (نسخة JOIN - أسرع)
+app.get('/api/watchlist', verifyToken, async (req, res) => {
+    try {
+        console.log(`📋 جلب قائمة المشاهدة للمستخدم ${req.userId}`);
+        
+        // التأكد من وجود الجدول
+        const [tables] = await db.execute("SHOW TABLES LIKE 'watchlist'");
+        if (tables.length === 0) {
+            console.log('⚠️ جدول watchlist غير موجود، يتم إنشاؤه...');
+            await db.execute(`
+                CREATE TABLE watchlist (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    user_id INT NOT NULL,
+                    item_type ENUM('movie', 'series', 'song', 'clip', 'animation', 'quran') NOT NULL,
+                    item_id INT NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE KEY unique_watchlist (user_id, item_type, item_id)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+            `);
+            console.log('✅ تم إنشاء جدول watchlist');
+        }
+
+        // استعلام واحد مع LEFT JOIN لكل الجداول
+        const [items] = await db.execute(`
+            SELECT 
+                w.id,
+                w.user_id,
+                w.item_type,
+                w.item_id,
+                w.created_at as added_at,
+                COALESCE(
+                    m.title,
+                    s.title,
+                    so.title,
+                    c.title,
+                    m2.title,
+                    su.name
+                ) as title,
+                COALESCE(
+                    m.title_ar,
+                    s.title_ar,
+                    so.title_ar,
+                    c.title_ar,
+                    m2.title_ar,
+                    su.name
+                ) as title_ar,
+                COALESCE(
+                    m.poster,
+                    s.poster,
+                    so.cover_image,
+                    c.thumbnail,
+                    m2.poster,
+                    r.image
+                ) as poster,
+                COALESCE(
+                    m.rating,
+                    s.rating,
+                    NULL
+                ) as rating,
+                COALESCE(
+                    m.year,
+                    s.year,
+                    so.year,
+                    c.year,
+                    m2.year,
+                    su.number
+                ) as year,
+                COALESCE(
+                    m.genre,
+                    s.genre,
+                    so.genre,
+                    NULL,
+                    m2.genre,
+                    NULL
+                ) as genre
+            FROM watchlist w
+            LEFT JOIN movies m ON w.item_type = 'movie' AND w.item_id = m.id
+            LEFT JOIN series s ON w.item_type = 'series' AND w.item_id = s.id
+            LEFT JOIN songs so ON w.item_type = 'song' AND w.item_id = so.id
+            LEFT JOIN clips c ON w.item_type = 'clip' AND w.item_id = c.id
+            LEFT JOIN movies m2 ON w.item_type = 'animation' AND w.item_id = m2.id
+            LEFT JOIN surahs su ON w.item_type = 'quran' AND w.item_id = su.id
+            LEFT JOIN reciters r ON su.reciter_id = r.id
+            WHERE w.user_id = ?
+            ORDER BY w.created_at DESC
+        `, [req.userId]);
+
+        console.log(`✅ تم جلب ${items.length} عنصر من قائمة المشاهدة`);
+        res.json(items);
+    } catch (error) {
+        console.error('❌ خطأ في جلب قائمة المشاهدة:', error);
+        res.status(500).json({ 
+            message: 'خطأ في جلب قائمة المشاهدة',
+            error: error.message 
+        });
+    }
+});
+
+// إضافة إلى قائمة المشاهدة
+app.post('/api/watchlist', verifyToken, async (req, res) => {
+    try {
+        const { itemId, itemType } = req.body;
+
+        console.log(`📝 إضافة إلى قائمة المشاهدة: user=${req.userId}, type=${itemType}, id=${itemId}`);
+
+        if (!itemId || !itemType) {
+            return res.status(400).json({ message: 'معرف العنصر ونوعه مطلوبان' });
+        }
+
+        const validTypes = ['movie', 'series', 'song', 'clip', 'animation', 'quran'];
+        if (!validTypes.includes(itemType)) {
+            return res.status(400).json({ message: 'نوع غير صالح' });
+        }
+
+        const tableMap = {
+            movie: 'movies',
+            series: 'series',
+            song: 'songs',
+            clip: 'clips',
+            animation: 'movies',
+            quran: 'surahs'
+        };
+        
+        const tableName = tableMap[itemType];
+        const [exists] = await db.execute(`SELECT id FROM ${tableName} WHERE id = ?`, [itemId]);
+        
+        if (exists.length === 0) {
+            return res.status(404).json({ message: 'العنصر غير موجود' });
+        }
+
+        const [existing] = await db.execute(
+            'SELECT id FROM watchlist WHERE user_id = ? AND item_type = ? AND item_id = ?',
+            [req.userId, itemType, itemId]
+        );
+
+        if (existing.length > 0) {
+            return res.status(400).json({ message: 'العنصر موجود بالفعل في القائمة' });
+        }
+
+        const [result] = await db.execute(
+            'INSERT INTO watchlist (user_id, item_type, item_id, created_at) VALUES (?, ?, ?, NOW())',
+            [req.userId, itemType, itemId]
+        );
+
+        const [newItem] = await db.execute(`
+            SELECT 
+                w.id,
+                w.user_id,
+                w.item_type,
+                w.item_id,
+                w.created_at as added_at,
+                COALESCE(
+                    m.title,
+                    s.title,
+                    so.title,
+                    c.title,
+                    m2.title,
+                    su.name
+                ) as title,
+                COALESCE(
+                    m.title_ar,
+                    s.title_ar,
+                    so.title_ar,
+                    c.title_ar,
+                    m2.title_ar,
+                    su.name
+                ) as title_ar,
+                COALESCE(
+                    m.poster,
+                    s.poster,
+                    so.cover_image,
+                    c.thumbnail,
+                    m2.poster,
+                    r.image
+                ) as poster
+            FROM watchlist w
+            LEFT JOIN movies m ON w.item_type = 'movie' AND w.item_id = m.id
+            LEFT JOIN series s ON w.item_type = 'series' AND w.item_id = s.id
+            LEFT JOIN songs so ON w.item_type = 'song' AND w.item_id = so.id
+            LEFT JOIN clips c ON w.item_type = 'clip' AND w.item_id = c.id
+            LEFT JOIN movies m2 ON w.item_type = 'animation' AND w.item_id = m2.id
+            LEFT JOIN surahs su ON w.item_type = 'quran' AND w.item_id = su.id
+            LEFT JOIN reciters r ON su.reciter_id = r.id
+            WHERE w.id = ?
+        `, [result.insertId]);
+
+        res.json({ 
+            id: result.insertId, 
+            item: newItem[0] || null,
+            message: 'تم إضافة العنصر إلى القائمة',
+            added: true
+        });
+    } catch (error) {
+        console.error('❌ خطأ في إضافة إلى قائمة المشاهدة:', error);
+        res.status(500).json({ 
+            message: 'خطأ في إضافة العنصر إلى القائمة',
+            error: error.message 
+        });
+    }
+});
+
+// إزالة من قائمة المشاهدة
+app.delete('/api/watchlist/:itemType/:itemId', verifyToken, async (req, res) => {
+    try {
+        const { itemType, itemId } = req.params;
+
+        console.log(`🗑️ إزالة من قائمة المشاهدة: user=${req.userId}, type=${itemType}, id=${itemId}`);
+
+        const result = await db.execute(
+            'DELETE FROM watchlist WHERE user_id = ? AND item_type = ? AND item_id = ?',
+            [req.userId, itemType, itemId]
+        );
+
+        if (result[0].affectedRows === 0) {
+            return res.status(404).json({ message: 'العنصر غير موجود في القائمة' });
+        }
+
+        res.json({ 
+            message: 'تم إزالة العنصر من القائمة',
+            removed: true
+        });
+    } catch (error) {
+        console.error('❌ خطأ في إزالة من قائمة المشاهدة:', error);
+        res.status(500).json({ 
+            message: 'خطأ في إزالة العنصر من القائمة',
+            error: error.message 
+        });
+    }
+});
+
+// تبديل حالة العنصر (إضافة/إزالة)
+app.post('/api/watchlist/toggle', verifyToken, async (req, res) => {
+    try {
+        const { itemId, itemType } = req.body;
+
+        console.log(`🔄 تبديل حالة العنصر: user=${req.userId}, type=${itemType}, id=${itemId}`);
+
+        if (!itemId || !itemType) {
+            return res.status(400).json({ message: 'معرف العنصر ونوعه مطلوبان' });
+        }
+
+        const validTypes = ['movie', 'series', 'song', 'clip', 'animation', 'quran'];
+        if (!validTypes.includes(itemType)) {
+            return res.status(400).json({ message: 'نوع غير صالح' });
+        }
+
+        const [existing] = await db.execute(
+            'SELECT id FROM watchlist WHERE user_id = ? AND item_type = ? AND item_id = ?',
+            [req.userId, itemType, itemId]
+        );
+
+        if (existing.length > 0) {
+            await db.execute(
+                'DELETE FROM watchlist WHERE user_id = ? AND item_type = ? AND item_id = ?',
+                [req.userId, itemType, itemId]
+            );
+            return res.json({ 
+                added: false, 
+                message: 'تم إزالة العنصر من القائمة' 
+            });
+        } else {
+            const tableMap = {
+                movie: 'movies',
+                series: 'series',
+                song: 'songs',
+                clip: 'clips',
+                animation: 'movies',
+                quran: 'surahs'
+            };
+            
+            const tableName = tableMap[itemType];
+            const [exists] = await db.execute(`SELECT id FROM ${tableName} WHERE id = ?`, [itemId]);
+            
+            if (exists.length === 0) {
+                return res.status(404).json({ message: 'العنصر غير موجود' });
+            }
+
+            await db.execute(
+                'INSERT INTO watchlist (user_id, item_type, item_id, created_at) VALUES (?, ?, ?, NOW())',
+                [req.userId, itemType, itemId]
+            );
+            return res.json({ 
+                added: true, 
+                message: 'تم إضافة العنصر إلى القائمة' 
+            });
+        }
+    } catch (error) {
+        console.error('❌ خطأ في تبديل حالة العنصر:', error);
+        res.status(500).json({ 
+            message: 'خطأ في تبديل حالة العنصر',
+            error: error.message 
+        });
+    }
+});
+
+// التحقق من وجود عنصر في قائمة المشاهدة
+app.get('/api/watchlist/:itemType/:itemId', verifyToken, async (req, res) => {
+    try {
+        const { itemType, itemId } = req.params;
+
+        const [existing] = await db.execute(
+            'SELECT id FROM watchlist WHERE user_id = ? AND item_type = ? AND item_id = ?',
+            [req.userId, itemType, itemId]
+        );
+
+        res.json({ 
+            exists: existing.length > 0 
+        });
+    } catch (error) {
+        console.error('❌ خطأ في التحقق من وجود العنصر:', error);
+        res.status(500).json({ 
+            message: 'خطأ في التحقق من وجود العنصر',
+            error: error.message 
+        });
+    }
+});
+
+// عدد العناصر في قائمة المشاهدة
+app.get('/api/watchlist/count', verifyToken, async (req, res) => {
+    try {
+        const [result] = await db.execute(
+            'SELECT COUNT(*) as count FROM watchlist WHERE user_id = ?',
+            [req.userId]
+        );
+
+        res.json({ 
+            count: result[0]?.count || 0 
+        });
+    } catch (error) {
+        console.error('❌ خطأ في جلب عدد عناصر القائمة:', error);
+        res.status(500).json({ 
+            message: 'خطأ في جلب عدد عناصر القائمة',
+            error: error.message 
+        });
+    }
+});
+
+// مسح جميع عناصر قائمة المشاهدة لمستخدم
+app.delete('/api/watchlist/clear', verifyToken, async (req, res) => {
+    try {
+        console.log(`🗑️ مسح جميع عناصر قائمة المشاهدة للمستخدم ${req.userId}`);
+
+        const result = await db.execute(
+            'DELETE FROM watchlist WHERE user_id = ?',
+            [req.userId]
+        );
+
+        res.json({ 
+            message: 'تم مسح جميع عناصر القائمة',
+            deletedCount: result[0].affectedRows || 0
+        });
+    } catch (error) {
+        console.error('❌ خطأ في مسح قائمة المشاهدة:', error);
+        res.status(500).json({ 
+            message: 'خطأ في مسح قائمة المشاهدة',
+            error: error.message 
+        });
+    }
+});
+
+console.log('✅ تم تحميل جميع دوال Watchlist API');
+
+// ============================================================
+// ========== 💬 COMMENTS API ==========
+// ============================================================
+
+app.get('/api/admin/comments', verifyToken, async (req, res) => {
+    if (req.userRole !== 'admin') return res.status(403).json({ message: 'غير مصرح' });
+    try {
+        const [comments] = await db.execute(`
+            SELECT 
+                c.*,
+                u.name as user_name,
+                u.avatar as user_avatar,
+                CASE 
+                    WHEN c.content_type = 'movie' THEN (SELECT title FROM movies WHERE id = c.content_id)
+                    WHEN c.content_type = 'series' THEN (SELECT title FROM series WHERE id = c.content_id)
+                    WHEN c.content_type = 'song' THEN (SELECT title FROM songs WHERE id = c.content_id)
+                    WHEN c.content_type = 'clip' THEN (SELECT title FROM clips WHERE id = c.content_id)
+                    ELSE NULL
+                END as content_title
+            FROM comments c
+            LEFT JOIN users u ON c.user_id = u.id
+            ORDER BY c.created_at DESC
+        `);
+        res.json(comments);
+    } catch (error) {
+        console.error('❌ خطأ في جلب التعليقات:', error);
+        res.status(500).json({ message: error.message });
+    }
+});
+
+app.get('/api/comments/:contentType/:contentId', async (req, res) => {
+    try {
+        const { contentType, contentId } = req.params;
+        const [comments] = await db.execute(`
+            SELECT 
+                c.*,
+                u.name as user_name,
+                u.avatar as user_avatar
+            FROM comments c
+            LEFT JOIN users u ON c.user_id = u.id
+            WHERE c.content_type = ? AND c.content_id = ? AND c.status = 'approved'
+            ORDER BY c.created_at DESC
+        `, [contentType, contentId]);
+        res.json(comments);
+    } catch (error) {
+        console.error('❌ خطأ في جلب تعليقات المحتوى:', error);
+        res.status(500).json({ message: error.message });
+    }
+});
+
+app.post('/api/comments', verifyToken, async (req, res) => {
+    try {
+        const { content_type, content_id, comment, rating } = req.body;
+        if (!content_type || !content_id || !comment) {
+            return res.status(400).json({ message: 'جميع الحقول مطلوبة' });
+        }
+        const [result] = await db.execute(
+            `INSERT INTO comments (user_id, content_type, content_id, comment, rating, status, created_at)
+             VALUES (?, ?, ?, ?, ?, 'pending', NOW())`,
+            [req.userId, content_type, content_id, comment, rating || 0]
+        );
+        res.json({ id: result.insertId, message: 'تم إضافة التعليق بنجاح' });
+    } catch (error) {
+        console.error('❌ خطأ في إضافة تعليق:', error);
+        res.status(500).json({ message: error.message });
+    }
+});
+
+app.put('/api/admin/comments/:commentId/status', verifyToken, async (req, res) => {
+    if (req.userRole !== 'admin') return res.status(403).json({ message: 'غير مصرح' });
+    try {
+        const { commentId } = req.params;
+        const { status } = req.body;
+        if (!['pending', 'approved', 'reported'].includes(status)) {
+            return res.status(400).json({ message: 'حالة غير صالحة' });
+        }
+        await db.execute('UPDATE comments SET status = ? WHERE id = ?', [status, commentId]);
+        res.json({ message: 'تم تحديث حالة التعليق بنجاح' });
+    } catch (error) {
+        console.error('❌ خطأ في تحديث حالة التعليق:', error);
+        res.status(500).json({ message: error.message });
+    }
+});
+
+app.post('/api/admin/comments/:commentId/reply', verifyToken, async (req, res) => {
+    if (req.userRole !== 'admin') return res.status(403).json({ message: 'غير مصرح' });
+    try {
+        const { commentId } = req.params;
+        const { reply } = req.body;
+        if (!reply || reply.trim() === '') {
+            return res.status(400).json({ message: 'الرد مطلوب' });
+        }
+        await db.execute('UPDATE comments SET reply = ?, reply_date = NOW() WHERE id = ?', [reply, commentId]);
+        res.json({ message: 'تم إضافة الرد بنجاح' });
+    } catch (error) {
+        console.error('❌ خطأ في إضافة الرد:', error);
+        res.status(500).json({ message: error.message });
+    }
+});
+
+app.delete('/api/admin/comments/:commentId', verifyToken, async (req, res) => {
+    if (req.userRole !== 'admin') return res.status(403).json({ message: 'غير مصرح' });
+    try {
+        const { commentId } = req.params;
+        await db.execute('DELETE FROM comments WHERE id = ?', [commentId]);
+        res.json({ message: 'تم حذف التعليق بنجاح' });
+    } catch (error) {
+        console.error('❌ خطأ في حذف التعليق:', error);
+        res.status(500).json({ message: error.message });
+    }
+});
+
+app.post('/api/comments/:commentId/like', verifyToken, async (req, res) => {
+    try {
+        const { commentId } = req.params;
+        await db.execute('UPDATE comments SET likes = likes + 1 WHERE id = ?', [commentId]);
+        const [result] = await db.execute('SELECT likes FROM comments WHERE id = ?', [commentId]);
+        res.json({ likes: result[0]?.likes || 0 });
+    } catch (error) {
+        console.error('❌ خطأ في إعجاب التعليق:', error);
+        res.status(500).json({ message: error.message });
+    }
+});
+
+// ============================================================
+// ========== 💳 SUBSCRIPTION API ==========
+// ============================================================
+
+app.get('/api/subscription/plans', verifyToken, async (req, res) => {
+    try {
+        const [plans] = await db.execute(`
+            SELECT * FROM subscription_plans 
+            WHERE is_active = 1 
+            ORDER BY price ASC
+        `);
+        res.json(plans);
+    } catch (error) {
+        console.error('❌ خطأ في جلب خطط الاشتراك:', error);
+        res.status(500).json({ message: error.message });
+    }
+});
+
+app.get('/api/subscription/current', verifyToken, async (req, res) => {
+    try {
+        const [subscriptions] = await db.execute(`
+            SELECT 
+                s.*,
+                p.name as plan_name,
+                p.name_ar as plan_name_ar,
+                p.duration as plan_duration,
+                p.price as plan_price
+            FROM user_subscriptions s
+            JOIN subscription_plans p ON s.plan_id = p.id
+            WHERE s.user_id = ? AND s.status = 'active'
+            ORDER BY s.created_at DESC
+            LIMIT 1
+        `, [req.userId]);
+
+        if (subscriptions.length === 0) {
+            const [freePlan] = await db.execute(
+                "SELECT * FROM subscription_plans WHERE name = 'free' OR price = 0 LIMIT 1"
+            );
+            if (freePlan.length > 0) {
+                return res.json({
+                    plan_id: freePlan[0].id,
+                    plan_name: freePlan[0].name,
+                    plan_name_ar: freePlan[0].name_ar,
+                    plan_duration: freePlan[0].duration,
+                    plan_price: freePlan[0].price,
+                    status: 'active'
+                });
+            }
+            return res.json(null);
+        }
+
+        res.json(subscriptions[0]);
+    } catch (error) {
+        console.error('❌ خطأ في جلب الخطة الحالية:', error);
+        res.status(500).json({ message: error.message });
+    }
+});
+
+app.post('/api/subscription/subscribe', verifyToken, async (req, res) => {
+    try {
+        const { planId } = req.body;
+        if (!planId) {
+            return res.status(400).json({ message: 'معرف الخطة مطلوب' });
+        }
+        const [plan] = await db.execute(
+            'SELECT * FROM subscription_plans WHERE id = ? AND is_active = 1',
+            [planId]
+        );
+        if (plan.length === 0) {
+            return res.status(404).json({ message: 'الخطة غير موجودة' });
+        }
+        await db.execute(
+            "UPDATE user_subscriptions SET status = 'expired' WHERE user_id = ? AND status = 'active'",
+            [req.userId]
+        );
+        let endDate = null;
+        const duration = plan[0].duration;
+        if (duration === 'month') {
+            endDate = new Date();
+            endDate.setMonth(endDate.getMonth() + 1);
+        } else if (duration === 'year') {
+            endDate = new Date();
+            endDate.setFullYear(endDate.getFullYear() + 1);
+        }
+        const [result] = await db.execute(
+            `INSERT INTO user_subscriptions 
+             (user_id, plan_id, status, start_date, end_date, created_at)
+             VALUES (?, ?, 'active', NOW(), ?, NOW())`,
+            [req.userId, planId, endDate]
+        );
+        await db.execute(
+            'UPDATE users SET plan = ? WHERE id = ?',
+            [plan[0].name, req.userId]
+        );
+        const [updatedUser] = await db.execute(
+            'SELECT id, name, email, role, plan, status, created_at FROM users WHERE id = ?',
+            [req.userId]
+        );
+        res.json({
+            message: 'تم الاشتراك بنجاح',
+            subscription_id: result.insertId,
+            user: updatedUser[0]
+        });
+    } catch (error) {
+        console.error('❌ خطأ في الاشتراك:', error);
+        res.status(500).json({ message: error.message });
+    }
+});
+
+app.post('/api/subscription/cancel', verifyToken, async (req, res) => {
+    try {
+        await db.execute(
+            "UPDATE user_subscriptions SET status = 'cancelled' WHERE user_id = ? AND status = 'active'",
+            [req.userId]
+        );
+        await db.execute(
+            "UPDATE users SET plan = 'free' WHERE id = ?",
+            [req.userId]
+        );
+        res.json({ message: 'تم إلغاء الاشتراك بنجاح' });
+    } catch (error) {
+        console.error('❌ خطأ في إلغاء الاشتراك:', error);
+        res.status(500).json({ message: error.message });
+    }
+});
+
+// ============================================================
+// ========== 🔥 BACKUP API ==========
+// ============================================================
+
+let backupHistory = [];
+
+app.get('/api/admin/backup/stats', verifyToken, async (req, res) => {
+    if (req.userRole !== 'admin') return res.status(403).json({ message: 'غير مصرح' });
+    try {
+        const [moviesCount] = await db.execute('SELECT COUNT(*) as count FROM movies');
+        const [seriesCount] = await db.execute('SELECT COUNT(*) as count FROM series');
+        const [episodesCount] = await db.execute('SELECT COUNT(*) as count FROM episodes');
+        const [channelsCount] = await db.execute('SELECT COUNT(*) as count FROM channels');
+        const [artistsCount] = await db.execute('SELECT COUNT(*) as count FROM artists');
+        const [songsCount] = await db.execute('SELECT COUNT(*) as count FROM songs');
+        const [clipsCount] = await db.execute('SELECT COUNT(*) as count FROM clips');
+        const [recitersCount] = await db.execute('SELECT COUNT(*) as count FROM reciters');
+        const [surahsCount] = await db.execute('SELECT COUNT(*) as count FROM surahs');
+        const [usersCount] = await db.execute('SELECT COUNT(*) as count FROM users');
+        const [commentsCount] = await db.execute('SELECT COUNT(*) as count FROM comments');
+        const [favoritesCount] = await db.execute('SELECT COUNT(*) as count FROM user_favorites');
+        const [likesCount] = await db.execute('SELECT COUNT(*) as count FROM user_likes');
+        const [historyCount] = await db.execute('SELECT COUNT(*) as count FROM watch_history');
+
+        const totalRecords = moviesCount[0].count + seriesCount[0].count + episodesCount[0].count +
+            channelsCount[0].count + artistsCount[0].count + songsCount[0].count +
+            clipsCount[0].count + recitersCount[0].count + surahsCount[0].count +
+            usersCount[0].count + commentsCount[0].count + favoritesCount[0].count +
+            likesCount[0].count + historyCount[0].count;
+
+        res.json({
+            movies: moviesCount[0].count,
+            series: seriesCount[0].count,
+            episodes: episodesCount[0].count,
+            channels: channelsCount[0].count,
+            artists: artistsCount[0].count,
+            songs: songsCount[0].count,
+            clips: clipsCount[0].count,
+            reciters: recitersCount[0].count,
+            surahs: surahsCount[0].count,
+            users: usersCount[0].count,
+            comments: commentsCount[0].count,
+            user_favorites: favoritesCount[0].count,
+            user_likes: likesCount[0].count,
+            watch_history: historyCount[0].count,
+            totalRecords: totalRecords,
+            totalSize: totalRecords * 1024
+        });
+    } catch (error) {
+        console.error('❌ خطأ في جلب الإحصائيات:', error);
+        res.status(500).json({ message: error.message });
+    }
+});
+
 // ========== WATCH HISTORY API ==========
 app.get('/api/history', verifyToken, async (req, res) => {
     try {
@@ -1121,7 +1988,60 @@ app.get('/api/search/all', async (req, res) => {
     }
 });
 
+app.post('/api/auth/login', async (req, res) => {
+    try {
+        const { email, password } = req.body;
+        const [users] = await db.execute('SELECT id, name, email, role, plan, status, avatar_url, created_at FROM users WHERE email = ?', [toSqlValue(email)]);
+        if (users.length === 0) return res.status(401).json({ message: 'بيانات غير صحيحة' });
+        
+        const user = users[0];
+        const isValid = await bcrypt.compare(password, user.password);
+        if (!isValid) return res.status(401).json({ message: 'بيانات غير صحيحة' });
+        
+        const token = jwt.sign({ id: user.id, role: user.role }, process.env.JWT_SECRET);
+        res.json({ token, user: { 
+            id: user.id, 
+            name: user.name, 
+            email: user.email, 
+            role: user.role,
+            plan: user.plan,
+            status: user.status,
+            avatar_url: user.avatar_url || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(user.name) + '&background=7c3aed&color=fff&size=128'
+        } });
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+});
+
+// جلب جميع المستخدمين (للمشرف)
+app.get('/api/admin/users', verifyToken, async (req, res) => {
+    if (req.userRole !== 'admin') return res.status(403).json({ message: 'غير مصرح' });
+    try {
+        const [users] = await db.execute('SELECT id, name, email, role, plan, status, avatar_url, created_at FROM users ORDER BY id DESC');
+        res.json(users);
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+});
+
+// تحديث المستخدم (للمشرف)
+app.put('/api/admin/users/:id', verifyToken, async (req, res) => {
+    if (req.userRole !== 'admin') return res.status(403).json({ message: 'غير مصرح' });
+    try {
+        const { name, email, role, plan, status, avatar_url } = req.body;
+        await db.execute(
+            'UPDATE users SET name=?, email=?, role=?, plan=?, status=?, avatar_url=? WHERE id=?',
+            [toSqlValue(name), toSqlValue(email), toSqlValue(role), toSqlValue(plan), toSqlValue(status), toSqlValue(avatar_url), req.params.id]
+        );
+        res.json({ message: 'تم تحديث المستخدم' });
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+});
+
+// ============================================================
 // ========== تشغيل الخادم ==========
+// ============================================================
 const PORT = process.env.PORT || 5000;
 const localIp = getLocalIp();
 
