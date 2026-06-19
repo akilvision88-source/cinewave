@@ -1,3 +1,4 @@
+// src/pages/series/TurkishSeries.js
 import React, { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useLanguage } from '../../context/LanguageContext';
@@ -20,7 +21,8 @@ const TurkishSeries = () => {
     const savedPage = localStorage.getItem('turkishseries_current_page');
     return savedPage ? parseInt(savedPage) : 1;
   });
-  const [itemsPerPage] = useState(30);
+  // ✅ تغيير عدد المسلسلات في الصفحة إلى 40
+  const [itemsPerPage] = useState(40);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
 
   const genres = ['all', 'Action', 'Romance', 'Drame', 'Historique', 'Comédie', 'Thriller'];
@@ -170,7 +172,8 @@ const TurkishSeries = () => {
             <p className="text-gray-500">{t('series.addFromAdmin')} <Link to="/admin" className="text-red-500 hover:text-red-400">{t('admin.dashboard')}</Link></p>
           </div>
         ) : viewMode === 'grid' ? (
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
+          // ✅ 2 أعمدة على الهواتف، 5+ أعمدة على الشاشات الكبيرة
+          <div className="grid grid-cols-2 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-7 xl:grid-cols-8 2xl:grid-cols-8 gap-2 sm:gap-3">
             {currentSeries.map((serie) => <SeriesCard key={serie.id} serie={serie} getTitle={getTitle} />)}
           </div>
         ) : (
@@ -191,20 +194,42 @@ const TurkishSeries = () => {
   );
 };
 
+// ✅ Series Card Component - مصغر مع إخفاء التصنيف على الهواتف
 const SeriesCard = ({ serie, getTitle }) => {
   const { t } = useLanguage();
   return (
     <Link to={`/series/${serie.id}`} className="block group">
       <div className="relative rounded-lg overflow-hidden bg-gray-900">
         <img src={serie.poster} alt={serie.title} className="w-full aspect-[2/3] object-cover transition-transform duration-300 group-hover:scale-105" loading="lazy" />
-        <div className="absolute top-2 left-2 bg-black/70 backdrop-blur-sm rounded-full px-1.5 py-0.5 flex items-center gap-0.5"><FaStar className="text-yellow-400 text-[10px]" /><span className="text-white text-[10px] font-semibold">{serie.rating || '?'}</span></div>
-        {serie.seasons && (<div className="absolute top-2 right-2 bg-black/70 backdrop-blur-sm rounded-full px-1.5 py-0.5"><FaTv className="text-gray-400 text-[10px] inline ml-0.5" /><span className="text-white text-[10px]">{serie.seasons} {t('series.seasons')}</span></div>)}
+        {/* ✅ تقييم أصغر */}
+        <div className="absolute top-1 left-1 bg-black/70 backdrop-blur-sm rounded-full px-1 py-0.5 flex items-center gap-0.5">
+          <FaStar className="text-yellow-400 text-[8px] xs:text-[10px]" />
+          <span className="text-white text-[8px] xs:text-[10px] font-semibold">{serie.rating || '?'}</span>
+        </div>
+        {serie.seasons && (
+          <div className="absolute top-1 right-1 bg-black/70 backdrop-blur-sm rounded-full px-1 py-0.5">
+            <span className="text-white text-[7px] xs:text-[9px]">{serie.seasons} {t('series.seasons')}</span>
+          </div>
+        )}
+        {/* ✅ التصنيف يظهر فقط على الشاشات الكبيرة (sm: وما فوق) */}
+        <div className="absolute bottom-1 left-1 bg-black/70 backdrop-blur-sm rounded-full px-1 py-0.5 hidden sm:block">
+          <span className="text-white text-[6px] xs:text-[8px]">تركي</span>
+        </div>
       </div>
-      <div className="mt-1"><h3 className="text-white font-semibold text-xs line-clamp-1 group-hover:text-red-500 transition">{getTitle(serie)}</h3><div className="flex items-center gap-1 text-gray-400 text-[10px] mt-0.5"><FaCalendarAlt className="text-[9px]" /><span>{serie.year}</span><span className="w-0.5 h-0.5 bg-gray-600 rounded-full"></span><span className="line-clamp-1">{serie.genre}</span></div></div>
+      <div className="mt-0.5 xs:mt-1">
+        <h3 className="text-white font-semibold text-[9px] xs:text-[11px] sm:text-[12px] leading-tight line-clamp-1 group-hover:text-red-500 transition">{getTitle(serie)}</h3>
+        <div className="flex items-center gap-0.5 text-gray-400 text-[7px] xs:text-[9px] mt-0.5">
+          <FaCalendarAlt className="text-[6px] xs:text-[8px]" />
+          <span>{serie.year}</span>
+          <span className="w-0.5 h-0.5 bg-gray-600 rounded-full"></span>
+          <span className="line-clamp-1 text-[6px] xs:text-[8px]">{serie.genre}</span>
+        </div>
+      </div>
     </Link>
   );
 };
 
+// Series List Item Component (يبقى كما هو)
 const SeriesListItem = ({ serie, getTitle }) => {
   const { t } = useLanguage();
   return (
@@ -213,7 +238,12 @@ const SeriesListItem = ({ serie, getTitle }) => {
         <img src={serie.poster} alt={serie.title} className="w-14 h-20 object-cover rounded" />
         <div className="flex-1">
           <h3 className="text-white font-semibold text-sm group-hover:text-red-500 transition">{getTitle(serie)}</h3>
-          <div className="flex flex-wrap items-center gap-2 text-xs text-gray-400 mt-1"><span className="flex items-center gap-0.5"><FaStar className="text-yellow-400 text-[10px]" /> {serie.rating || '?'}/10</span><span className="flex items-center gap-0.5"><FaCalendarAlt className="text-[10px]" /> {serie.year}</span>{serie.seasons && (<span className="flex items-center gap-0.5"><FaTv className="text-[10px]" /> {serie.seasons} {t('series.seasons')}</span>)}<span>{serie.genre}</span></div>
+          <div className="flex flex-wrap items-center gap-2 text-xs text-gray-400 mt-1">
+            <span className="flex items-center gap-0.5"><FaStar className="text-yellow-400 text-[10px]" /> {serie.rating || '?'}/10</span>
+            <span className="flex items-center gap-0.5"><FaCalendarAlt className="text-[10px]" /> {serie.year}</span>
+            {serie.seasons && (<span className="flex items-center gap-0.5"><FaTv className="text-[10px]" /> {serie.seasons} {t('series.seasons')}</span>)}
+            <span>{serie.genre}</span>
+          </div>
           <p className="text-gray-500 text-xs mt-1 line-clamp-1">{serie.description || 'لا يوجد وصف متاح لهذا المسلسل'}</p>
           <div className="flex items-center gap-2 mt-2"><button className="bg-red-600 text-white px-3 py-0.5 rounded text-xs hover:bg-red-700 transition">مشاهدة</button><button className="text-gray-400 hover:text-red-500 transition"><FaHeart size={12} /></button></div>
         </div>
