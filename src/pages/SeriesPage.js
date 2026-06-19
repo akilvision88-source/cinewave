@@ -22,10 +22,9 @@ const SeriesPage = () => {
     const savedPage = localStorage.getItem('series_current_page');
     return savedPage ? parseInt(savedPage) : 1;
   });
-  const [itemsPerPage] = useState(30);
+  const [itemsPerPage] = useState(40);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
 
-  // تصنيفات المسلسلات (للشريط العلوي)
   const categories = [
     { id: 'all', name: 'الكل', nameEn: 'All', icon: '🎬', path: '/series' },
     { id: 'arabic', name: 'مسلسلات عربية', nameEn: 'Arabic Series', icon: '🇸🇦', path: '/series/arabic' },
@@ -56,7 +55,6 @@ const SeriesPage = () => {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  // تحميل جميع المسلسلات من جميع التصنيفات
   useEffect(() => {
     const loadAllSeries = async () => {
       setLoading(true);
@@ -78,7 +76,6 @@ const SeriesPage = () => {
     loadAllSeries();
   }, []);
 
-  // تحديث التصنيف المحدد من URL
   useEffect(() => {
     const currentPath = location.pathname;
     const category = categories.find(c => c.path === currentPath);
@@ -89,29 +86,20 @@ const SeriesPage = () => {
     }
   }, [location.pathname]);
 
-  // فلترة النتائج
   useEffect(() => {
     let results = [...allSeries];
-    
     if (selectedCategory !== 'all') {
       results = results.filter(s => s.category === selectedCategory);
     }
-    
     if (searchTerm) {
-      results = results.filter(s => 
-        s.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (s.titleAr && s.titleAr.includes(searchTerm))
-      );
+      results = results.filter(s => s.title.toLowerCase().includes(searchTerm.toLowerCase()) || (s.titleAr && s.titleAr.includes(searchTerm)));
     }
-    
     if (selectedGenre !== 'all') {
       results = results.filter(s => s.genre === selectedGenre);
     }
-    
     if (selectedYear !== 'all') {
       results = results.filter(s => s.year?.toString() === selectedYear);
     }
-    
     setFilteredSeries(results);
     handlePageChange(1);
   }, [searchTerm, selectedGenre, selectedYear, selectedCategory, allSeries]);
@@ -172,40 +160,23 @@ const SeriesPage = () => {
 
   return (
     <div className="min-h-screen bg-black">
-      {/* Hero Section صغير - ممتد بالكامل */}
       <div className="relative h-[20vh] md:h-[25vh] w-full overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-r from-black/80 via-black/50 to-transparent z-10" />
-        <div className="absolute inset-0 bg-cover bg-center" style={{ 
-          backgroundImage: 'url(https://image.tmdb.org/t/p/original/8Gxv8gSFCU0XGDykEGv7zR1n2ua.jpg)',
-          filter: 'brightness(0.4)'
-        }} />
+        <div className="absolute inset-0 bg-cover bg-center" style={{ backgroundImage: 'url(https://image.tmdb.org/t/p/original/8Gxv8gSFCU0XGDykEGv7zR1n2ua.jpg)', filter: 'brightness(0.4)' }} />
         <div className="relative h-full w-full px-3 sm:px-4 md:px-6 lg:px-8 flex flex-col justify-center z-20">
           <div className="flex items-center gap-2 mb-1">
             <FaTv className="text-red-500 text-xl md:text-2xl" />
-            <h1 className="text-xl md:text-2xl font-bold text-white">
-              {language === 'ar' ? 'المسلسلات' : 'Series'}
-            </h1>
+            <h1 className="text-xl md:text-2xl font-bold text-white">{language === 'ar' ? 'المسلسلات' : 'Series'}</h1>
           </div>
-          <p className="text-gray-300 text-xs sm:text-sm max-w-2xl">
-            {language === 'ar' ? 'استمتع بمشاهدة أحدث وأفضل المسلسلات من جميع أنحاء العالم' : 'Enjoy watching the latest and best series from around the world'}
-          </p>
+          <p className="text-gray-300 text-xs sm:text-sm max-w-2xl">{language === 'ar' ? 'استمتع بمشاهدة أحدث وأفضل المسلسلات من جميع أنحاء العالم' : 'Enjoy watching the latest and best series from around the world'}</p>
         </div>
       </div>
 
-      {/* شريط التصنيفات العلوي - ممتد بالكامل */}
       <div className="sticky top-0 z-30 bg-gray-900/95 backdrop-blur-md border-b border-gray-800">
         <div className="relative overflow-x-auto scrollbar-hide">
           <div className="flex gap-1 py-2 px-3 sm:px-4 md:px-6 lg:px-8">
             {categories.map((category) => (
-              <Link
-                key={category.id}
-                to={category.path}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all duration-200 whitespace-nowrap ${
-                  location.pathname === category.path
-                    ? 'bg-red-600 text-white shadow-lg shadow-red-600/30'
-                    : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-white'
-                }`}
-              >
+              <Link key={category.id} to={category.path} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all duration-200 whitespace-nowrap ${location.pathname === category.path ? 'bg-red-600 text-white shadow-lg shadow-red-600/30' : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-white'}`}>
                 <span className="text-sm">{category.icon}</span>
                 <span>{language === 'ar' ? category.name : category.nameEn}</span>
               </Link>
@@ -214,77 +185,40 @@ const SeriesPage = () => {
         </div>
       </div>
 
-      {/* المحتوى الرئيسي - ممتد بالكامل مع مسافات جانبية بسيطة */}
       <div className="w-full px-3 sm:px-4 md:px-6 lg:px-8 py-4">
-        {/* شريط البحث والفلترة */}
         <div className="flex flex-col gap-3 mb-4">
           <div className="flex flex-col md:flex-row gap-3">
             <div className="flex-1 relative">
               <FaSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500 text-sm" />
-              <input 
-                type="text" 
-                placeholder={t('search.placeholder')} 
-                value={searchTerm} 
-                onChange={(e) => setSearchTerm(e.target.value)} 
-                className="w-full bg-gray-900 border border-gray-800 rounded-lg py-2 pl-10 pr-3 text-white focus:outline-none focus:border-red-500 text-sm" 
-              />
+              <input type="text" placeholder={t('search.placeholder')} value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full bg-gray-900 border border-gray-800 rounded-lg py-2 pl-10 pr-3 text-white focus:outline-none focus:border-red-500 text-sm" />
             </div>
             <div className="flex gap-2">
-              <select 
-                value={selectedGenre} 
-                onChange={(e) => setSelectedGenre(e.target.value)} 
-                className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm flex-1"
-              >
-                {genres.map(g => (
-                  <option key={g} value={g}>
-                    {g === 'all' ? t('common.allGenres') : g}
-                  </option>
-                ))}
+              <select value={selectedGenre} onChange={(e) => setSelectedGenre(e.target.value)} className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm flex-1">
+                {genres.map(g => (<option key={g} value={g}>{g === 'all' ? t('common.allGenres') : g}</option>))}
               </select>
-              <select 
-                value={selectedYear} 
-                onChange={(e) => setSelectedYear(e.target.value)} 
-                className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm"
-              >
-                {years.map(y => (
-                  <option key={y} value={y}>
-                    {y === 'all' ? t('common.allYears') : y}
-                  </option>
-                ))}
+              <select value={selectedYear} onChange={(e) => setSelectedYear(e.target.value)} className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm">
+                {years.map(y => (<option key={y} value={y}>{y === 'all' ? t('common.allYears') : y}</option>))}
               </select>
             </div>
           </div>
           
-          {/* أزرار تبديل العرض */}
           <div className={`flex ${isMobile ? 'justify-center' : 'justify-end'}`}>
             <div className="flex gap-1 bg-gray-800 rounded-lg p-1">
-              <button
-                onClick={() => handleViewModeChange('grid')}
-                className={`px-3 py-1.5 rounded-md transition text-sm flex items-center gap-1 ${viewMode === 'grid' ? 'bg-red-600 text-white' : 'text-gray-400 hover:bg-gray-700'}`}
-                title="عرض شبكي"
-              >
-                <FaTh size={14} />
-                <span className="hidden sm:inline">شبكة</span>
+              <button onClick={() => handleViewModeChange('grid')} className={`px-3 py-1.5 rounded-md transition text-sm flex items-center gap-1 ${viewMode === 'grid' ? 'bg-red-600 text-white' : 'text-gray-400 hover:bg-gray-700'}`} title="عرض شبكي">
+                <FaTh size={14} /><span className="hidden sm:inline">شبكة</span>
               </button>
-              <button
-                onClick={() => handleViewModeChange('list')}
-                className={`px-3 py-1.5 rounded-md transition text-sm flex items-center gap-1 ${viewMode === 'list' ? 'bg-red-600 text-white' : 'text-gray-400 hover:bg-gray-700'}`}
-                title="عرض قائمة"
-              >
-                <FaList size={14} />
-                <span className="hidden sm:inline">قائمة</span>
+              <button onClick={() => handleViewModeChange('list')} className={`px-3 py-1.5 rounded-md transition text-sm flex items-center gap-1 ${viewMode === 'list' ? 'bg-red-600 text-white' : 'text-gray-400 hover:bg-gray-700'}`} title="عرض قائمة">
+                <FaList size={14} /><span className="hidden sm:inline">قائمة</span>
               </button>
             </div>
           </div>
         </div>
 
-        {/* عدد المسلسلات والصفحات */}
         <div className="flex justify-between items-center mb-3">
           <p className="text-gray-400 text-sm">{filteredSeries.length} {t('series.seriesCount')}</p>
           <p className="text-gray-500 text-xs">صفحة {currentPage} من {totalPages}</p>
         </div>
 
-        {/* عرض المسلسلات - شبكة ممتدة */}
         {filteredSeries.length === 0 ? (
           <div className="text-center py-12">
             <FaTv className="text-gray-700 text-5xl mx-auto mb-4" />
@@ -292,7 +226,8 @@ const SeriesPage = () => {
             <p className="text-gray-500 text-sm">{t('series.addFromAdmin')} <Link to="/admin" className="text-red-500 hover:text-red-400">{t('admin.dashboard')}</Link></p>
           </div>
         ) : viewMode === 'grid' ? (
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7 gap-3 sm:gap-4">
+          // ✅ 2 أعمدة على الهواتف، 5+ أعمدة على الشاشات الكبيرة
+          <div className="grid grid-cols-2 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-7 xl:grid-cols-8 2xl:grid-cols-8 gap-2 sm:gap-3">
             {currentSeries.map((serie) => <SeriesCard key={serie.id} serie={serie} getCategoryName={getCategoryName} />)}
           </div>
         ) : (
@@ -301,44 +236,15 @@ const SeriesPage = () => {
           </div>
         )}
 
-        {/* Pagination */}
         {totalPages > 1 && (
           <div className="flex justify-center items-center gap-1 mt-8 mb-4">
-            <button
-              onClick={goToPrevPage}
-              disabled={currentPage === 1}
-              className={`p-2 rounded-lg transition ${
-                currentPage === 1 
-                  ? 'bg-gray-800 text-gray-600 cursor-not-allowed' 
-                  : 'bg-gray-800 text-white hover:bg-red-600'
-              }`}
-            >
+            <button onClick={goToPrevPage} disabled={currentPage === 1} className={`p-2 rounded-lg transition ${currentPage === 1 ? 'bg-gray-800 text-gray-600 cursor-not-allowed' : 'bg-gray-800 text-white hover:bg-red-600'}`}>
               <FaChevronRight size={14} />
             </button>
-            
             {getPageNumbers().map(number => (
-              <button
-                key={number}
-                onClick={() => goToPage(number)}
-                className={`w-8 h-8 rounded-lg transition text-sm ${
-                  currentPage === number
-                    ? 'bg-red-600 text-white'
-                    : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
-                }`}
-              >
-                {number}
-              </button>
+              <button key={number} onClick={() => goToPage(number)} className={`w-8 h-8 rounded-lg transition text-sm ${currentPage === number ? 'bg-red-600 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'}`}>{number}</button>
             ))}
-            
-            <button
-              onClick={goToNextPage}
-              disabled={currentPage === totalPages}
-              className={`p-2 rounded-lg transition ${
-                currentPage === totalPages 
-                  ? 'bg-gray-800 text-gray-600 cursor-not-allowed' 
-                  : 'bg-gray-800 text-white hover:bg-red-600'
-              }`}
-            >
+            <button onClick={goToNextPage} disabled={currentPage === totalPages} className={`p-2 rounded-lg transition ${currentPage === totalPages ? 'bg-gray-800 text-gray-600 cursor-not-allowed' : 'bg-gray-800 text-white hover:bg-red-600'}`}>
               <FaChevronLeft size={14} />
             </button>
           </div>
@@ -348,40 +254,38 @@ const SeriesPage = () => {
   );
 };
 
-// بطاقة المسلسل (عرض شبكي)
 const SeriesCard = ({ serie, getCategoryName }) => {
   const { t } = useLanguage();
   return (
     <Link to={`/series/${serie.id}`} className="block group">
       <div className="relative rounded-lg overflow-hidden bg-gray-900">
         <img src={serie.poster} alt={serie.title} className="w-full aspect-[2/3] object-cover transition-transform duration-300 group-hover:scale-105" loading="lazy" />
-        <div className="absolute top-2 left-2 bg-black/70 backdrop-blur-sm rounded-full px-1.5 py-0.5 flex items-center gap-0.5">
-          <FaStar className="text-yellow-400 text-[10px]" />
-          <span className="text-white text-[10px] font-semibold">{serie.rating || '?'}</span>
+        <div className="absolute top-1 left-1 bg-black/70 backdrop-blur-sm rounded-full px-1 py-0.5 flex items-center gap-0.5">
+          <FaStar className="text-yellow-400 text-[8px] xs:text-[10px]" />
+          <span className="text-white text-[8px] xs:text-[10px] font-semibold">{serie.rating || '?'}</span>
         </div>
         {serie.seasons && (
-          <div className="absolute top-2 right-2 bg-black/70 backdrop-blur-sm rounded-full px-1.5 py-0.5">
-            <span className="text-white text-[9px]">{serie.seasons} {t('series.seasons')}</span>
+          <div className="absolute top-1 right-1 bg-black/70 backdrop-blur-sm rounded-full px-1 py-0.5">
+            <span className="text-white text-[7px] xs:text-[9px]">{serie.seasons} {t('series.seasons')}</span>
           </div>
         )}
-        <div className="absolute bottom-2 left-2 bg-black/70 backdrop-blur-sm rounded-full px-1.5 py-0.5">
-          <span className="text-white text-[9px]">{getCategoryName(serie.category)}</span>
+        <div className="absolute bottom-1 left-1 bg-black/70 backdrop-blur-sm rounded-full px-1 py-0.5 hidden sm:block">
+          <span className="text-white text-[6px] xs:text-[8px]">{getCategoryName(serie.category)}</span>
         </div>
       </div>
-      <div className="mt-1">
-        <h3 className="text-white font-semibold text-xs line-clamp-1 group-hover:text-red-500 transition">{serie.title}</h3>
-        <div className="flex items-center gap-1 text-gray-400 text-[10px] mt-0.5">
-          <FaCalendarAlt className="text-[9px]" />
+      <div className="mt-0.5 xs:mt-1">
+        <h3 className="text-white font-semibold text-[9px] xs:text-[11px] sm:text-[12px] leading-tight line-clamp-1 group-hover:text-red-500 transition">{serie.title}</h3>
+        <div className="flex items-center gap-0.5 text-gray-400 text-[7px] xs:text-[9px] mt-0.5">
+          <FaCalendarAlt className="text-[6px] xs:text-[8px]" />
           <span>{serie.year}</span>
           <span className="w-0.5 h-0.5 bg-gray-600 rounded-full"></span>
-          <span className="line-clamp-1">{serie.genre}</span>
+          <span className="line-clamp-1 text-[6px] xs:text-[8px]">{serie.genre}</span>
         </div>
       </div>
     </Link>
   );
 };
 
-// عنصر المسلسل (عرض قائمة)
 const SeriesListItem = ({ serie, getCategoryName }) => {
   const { t } = useLanguage();
   return (

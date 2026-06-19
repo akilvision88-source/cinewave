@@ -22,10 +22,9 @@ const MoviesPage = () => {
     const savedPage = localStorage.getItem('movies_current_page');
     return savedPage ? parseInt(savedPage) : 1;
   });
-  const [itemsPerPage] = useState(30);
+  const [itemsPerPage] = useState(40);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
 
-  // تصنيفات الأفلام (للشريط العلوي)
   const categories = [
     { id: 'all', name: 'الكل', nameEn: 'All', icon: '🎬', path: '/movies' },
     { id: 'arabwood', name: 'أفلام عربية', nameEn: 'Arabwood', icon: '🇸🇦', path: '/movies/arabwood' },
@@ -56,7 +55,6 @@ const MoviesPage = () => {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  // تحميل جميع الأفلام من جميع التصنيفات
   useEffect(() => {
     const loadAllMovies = async () => {
       setLoading(true);
@@ -78,7 +76,6 @@ const MoviesPage = () => {
     loadAllMovies();
   }, []);
 
-  // تحديث التصنيف المحدد من URL
   useEffect(() => {
     const currentPath = location.pathname;
     const category = categories.find(c => c.path === currentPath);
@@ -89,7 +86,7 @@ const MoviesPage = () => {
     }
   }, [location.pathname]);
 
-  // فلترة النتائج
+  // ✅ التعديل هنا: إضافة ترتيب حسب السنة من الأحدث إلى الأقدم
   useEffect(() => {
     let results = [...allMovies];
     
@@ -111,6 +108,13 @@ const MoviesPage = () => {
     if (selectedYear !== 'all') {
       results = results.filter(m => m.year?.toString() === selectedYear);
     }
+    
+    // ترتيب الأفلام من الأحدث إلى الأقدم حسب السنة
+    results.sort((a, b) => {
+      const yearA = parseInt(a.year) || 0;
+      const yearB = parseInt(b.year) || 0;
+      return yearB - yearA; // الأحدث أولاً
+    });
     
     setFilteredMovies(results);
     handlePageChange(1);
@@ -172,7 +176,6 @@ const MoviesPage = () => {
 
   return (
     <div className="min-h-screen bg-black">
-      {/* Hero Section صغير - ممتد بالكامل */}
       <div className="relative h-[20vh] md:h-[25vh] w-full overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-r from-black/80 via-black/50 to-transparent z-10" />
         <div className="absolute inset-0 bg-cover bg-center" style={{ 
@@ -192,7 +195,6 @@ const MoviesPage = () => {
         </div>
       </div>
 
-      {/* شريط التصنيفات العلوي - ممتد بالكامل */}
       <div className="sticky top-0 z-30 bg-gray-900/95 backdrop-blur-md border-b border-gray-800">
         <div className="relative overflow-x-auto scrollbar-hide">
           <div className="flex gap-1 py-2 px-3 sm:px-4 md:px-6 lg:px-8">
@@ -214,9 +216,7 @@ const MoviesPage = () => {
         </div>
       </div>
 
-      {/* المحتوى الرئيسي - ممتد بالكامل مع مسافات جانبية بسيطة */}
       <div className="w-full px-3 sm:px-4 md:px-6 lg:px-8 py-4">
-        {/* شريط البحث والفلترة */}
         <div className="flex flex-col gap-3 mb-4">
           <div className="flex flex-col md:flex-row gap-3">
             <div className="flex-1 relative">
@@ -255,7 +255,6 @@ const MoviesPage = () => {
             </div>
           </div>
           
-          {/* أزرار تبديل العرض */}
           <div className={`flex ${isMobile ? 'justify-center' : 'justify-end'}`}>
             <div className="flex gap-1 bg-gray-800 rounded-lg p-1">
               <button
@@ -278,13 +277,11 @@ const MoviesPage = () => {
           </div>
         </div>
 
-        {/* عدد الأفلام والصفحات */}
         <div className="flex justify-between items-center mb-3">
           <p className="text-gray-400 text-sm">{filteredMovies.length} {t('movies.moviesCount')}</p>
           <p className="text-gray-500 text-xs">صفحة {currentPage} من {totalPages}</p>
         </div>
 
-        {/* عرض الأفلام - شبكة ممتدة */}
         {filteredMovies.length === 0 ? (
           <div className="text-center py-12">
             <FaFilm className="text-gray-700 text-5xl mx-auto mb-4" />
@@ -292,16 +289,19 @@ const MoviesPage = () => {
             <p className="text-gray-500 text-sm">{t('movies.addFromAdmin')} <Link to="/admin" className="text-red-500 hover:text-red-400">{t('admin.dashboard')}</Link></p>
           </div>
         ) : viewMode === 'grid' ? (
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7 gap-3 sm:gap-4">
-            {currentMovies.map((movie) => <MovieCard key={movie.id} movie={movie} getCategoryName={getCategoryName} />)}
+          <div className="grid grid-cols-2 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-7 xl:grid-cols-8 2xl:grid-cols-8 gap-2 sm:gap-3">
+            {currentMovies.map((movie) => (
+              <MovieCard key={movie.id} movie={movie} getCategoryName={getCategoryName} />
+            ))}
           </div>
         ) : (
           <div className="space-y-2">
-            {currentMovies.map((movie) => <MovieListItem key={movie.id} movie={movie} getCategoryName={getCategoryName} />)}
+            {currentMovies.map((movie) => (
+              <MovieListItem key={movie.id} movie={movie} getCategoryName={getCategoryName} />
+            ))}
           </div>
         )}
 
-        {/* Pagination */}
         {totalPages > 1 && (
           <div className="flex justify-center items-center gap-1 mt-8 mb-4">
             <button
@@ -348,7 +348,6 @@ const MoviesPage = () => {
   );
 };
 
-// بطاقة الفيلم (عرض شبكي)
 const MovieCard = ({ movie, getCategoryName }) => {
   return (
     <Link to={`/movie/${movie.id}`} className="block group">
@@ -359,34 +358,33 @@ const MovieCard = ({ movie, getCategoryName }) => {
           className="w-full aspect-[2/3] object-cover transition-transform duration-300 group-hover:scale-105" 
           loading="lazy"
         />
-        <div className="absolute top-2 left-2 bg-black/70 backdrop-blur-sm rounded-full px-1.5 py-0.5 flex items-center gap-0.5">
-          <FaStar className="text-yellow-400 text-[10px]" />
-          <span className="text-white text-[10px] font-semibold">{movie.rating || '?'}</span>
+        <div className="absolute top-1 left-1 bg-black/70 backdrop-blur-sm rounded-full px-1 py-0.5 flex items-center gap-0.5">
+          <FaStar className="text-yellow-400 text-[8px] xs:text-[10px]" />
+          <span className="text-white text-[8px] xs:text-[10px] font-semibold">{movie.rating || '?'}</span>
         </div>
         {movie.duration && (
-          <div className="absolute top-2 right-2 bg-black/70 backdrop-blur-sm rounded-full px-1.5 py-0.5">
-            <FaClock className="text-gray-400 text-[10px] inline ml-0.5" />
-            <span className="text-white text-[10px]">{movie.duration}</span>
+          <div className="absolute top-1 right-1 bg-black/70 backdrop-blur-sm rounded-full px-1 py-0.5">
+            <FaClock className="text-gray-400 text-[7px] xs:text-[9px] inline ml-0.5" />
+            <span className="text-white text-[7px] xs:text-[9px]">{movie.duration}</span>
           </div>
         )}
-        <div className="absolute bottom-2 left-2 bg-black/70 backdrop-blur-sm rounded-full px-1.5 py-0.5">
-          <span className="text-white text-[9px]">{getCategoryName(movie.category)}</span>
+        <div className="absolute bottom-1 left-1 bg-black/70 backdrop-blur-sm rounded-full px-1 py-0.5 hidden sm:block">
+          <span className="text-white text-[6px] xs:text-[8px]">{getCategoryName(movie.category)}</span>
         </div>
       </div>
-      <div className="mt-1">
-        <h3 className="text-white font-semibold text-xs line-clamp-1 group-hover:text-red-500 transition">{movie.title}</h3>
-        <div className="flex items-center gap-1 text-gray-400 text-[10px] mt-0.5">
-          <FaCalendarAlt className="text-[9px]" />
+      <div className="mt-0.5 xs:mt-1">
+        <h3 className="text-white font-semibold text-[9px] xs:text-[11px] sm:text-[12px] leading-tight line-clamp-1 group-hover:text-red-500 transition">{movie.title}</h3>
+        <div className="flex items-center gap-0.5 text-gray-400 text-[7px] xs:text-[9px] mt-0.5">
+          <FaCalendarAlt className="text-[6px] xs:text-[8px]" />
           <span>{movie.year}</span>
           <span className="w-0.5 h-0.5 bg-gray-600 rounded-full"></span>
-          <span className="line-clamp-1">{movie.genre}</span>
+          <span className="line-clamp-1 text-[6px] xs:text-[8px]">{movie.genre}</span>
         </div>
       </div>
     </Link>
   );
 };
 
-// عنصر الفيلم (عرض قائمة)
 const MovieListItem = ({ movie, getCategoryName }) => {
   return (
     <Link to={`/movie/${movie.id}`} className="block group">
