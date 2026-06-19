@@ -22,7 +22,8 @@ const AsianMovies = () => {
     const savedPage = localStorage.getItem('asian_current_page');
     return savedPage ? parseInt(savedPage) : 1;
   });
-  const [itemsPerPage] = useState(30);
+  // ✅ تغيير عدد الأفلام في الصفحة إلى 40
+  const [itemsPerPage] = useState(40);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
 
   // ========== تصنيفات الأفلام (الشريط العلوي) ==========
@@ -258,7 +259,8 @@ const AsianMovies = () => {
             <p className="text-gray-500 text-sm">يمكنك إضافة أفلام جديدة من لوحة التحكم</p>
           </div>
         ) : viewMode === 'grid' ? (
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7 gap-3">
+          // ✅ 2 أعمدة على الهواتف، 5+ أعمدة على الشاشات الكبيرة
+          <div className="grid grid-cols-2 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-7 xl:grid-cols-8 2xl:grid-cols-8 gap-2 sm:gap-3">
             {currentMovies.map((movie) => (
               <MovieCard 
                 key={movie.id} 
@@ -328,7 +330,7 @@ const AsianMovies = () => {
   );
 };
 
-// Movie Card Component (Grid View)
+// ✅ Movie Card Component (Grid View) - مصغر مع إخفاء التصنيف على الهواتف
 const MovieCard = ({ movie, getCategoryIcon, getCategoryName }) => (
   <Link to={`/movie/${movie.id}`} className="block group">
     <div className="relative rounded-lg overflow-hidden bg-gray-900">
@@ -338,33 +340,35 @@ const MovieCard = ({ movie, getCategoryIcon, getCategoryName }) => (
         className="w-full aspect-[2/3] object-cover transition-transform duration-300 group-hover:scale-105" 
         loading="lazy"
       />
-      <div className="absolute top-2 left-2 bg-black/70 backdrop-blur-sm rounded-full px-1.5 py-0.5 flex items-center gap-0.5">
-        <FaStar className="text-yellow-400 text-[10px]" />
-        <span className="text-white text-[10px] font-semibold">{movie.rating || '?'}</span>
+      {/* ✅ تقييم أصغر */}
+      <div className="absolute top-1 left-1 bg-black/70 backdrop-blur-sm rounded-full px-1 py-0.5 flex items-center gap-0.5">
+        <FaStar className="text-yellow-400 text-[8px] xs:text-[10px]" />
+        <span className="text-white text-[8px] xs:text-[10px] font-semibold">{movie.rating || '?'}</span>
       </div>
       {movie.duration && (
-        <div className="absolute top-2 right-2 bg-black/70 backdrop-blur-sm rounded-full px-1.5 py-0.5">
-          <FaClock className="text-gray-400 text-[10px] inline ml-0.5" />
-          <span className="text-white text-[10px]">{movie.duration}</span>
+        <div className="absolute top-1 right-1 bg-black/70 backdrop-blur-sm rounded-full px-1 py-0.5">
+          <FaClock className="text-gray-400 text-[7px] xs:text-[9px] inline ml-0.5" />
+          <span className="text-white text-[7px] xs:text-[9px]">{movie.duration}</span>
         </div>
       )}
-      <div className="absolute bottom-2 left-2 bg-black/70 backdrop-blur-sm rounded-full px-1.5 py-0.5">
-        <span className="text-white text-[9px]">{getCategoryIcon(movie.category)} {getCategoryName(movie.category)}</span>
+      {/* ✅ التصنيف يظهر فقط على الشاشات الكبيرة (sm: وما فوق) */}
+      <div className="absolute bottom-1 left-1 bg-black/70 backdrop-blur-sm rounded-full px-1 py-0.5 hidden sm:block">
+        <span className="text-white text-[6px] xs:text-[8px]">{getCategoryIcon(movie.category)} {getCategoryName(movie.category)}</span>
       </div>
     </div>
-    <div className="mt-1">
-      <h3 className="text-white font-semibold text-xs line-clamp-1 group-hover:text-red-500 transition">{movie.title}</h3>
-      <div className="flex items-center gap-1 text-gray-400 text-[10px] mt-0.5">
-        <FaCalendarAlt className="text-[9px]" />
+    <div className="mt-0.5 xs:mt-1">
+      <h3 className="text-white font-semibold text-[9px] xs:text-[11px] sm:text-[12px] leading-tight line-clamp-1 group-hover:text-red-500 transition">{movie.title}</h3>
+      <div className="flex items-center gap-0.5 text-gray-400 text-[7px] xs:text-[9px] mt-0.5">
+        <FaCalendarAlt className="text-[6px] xs:text-[8px]" />
         <span>{movie.year}</span>
         <span className="w-0.5 h-0.5 bg-gray-600 rounded-full"></span>
-        <span className="line-clamp-1">{movie.genre}</span>
+        <span className="line-clamp-1 text-[6px] xs:text-[8px]">{movie.genre}</span>
       </div>
     </div>
   </Link>
 );
 
-// Movie List Item Component
+// Movie List Item Component (يبقى كما هو)
 const MovieListItem = ({ movie, getCategoryIcon, getCategoryName }) => (
   <Link to={`/movie/${movie.id}`} className="block group">
     <div className="flex gap-3 bg-gray-900/50 rounded-lg p-2 hover:bg-gray-800 transition border border-gray-800 hover:border-red-500/50">
