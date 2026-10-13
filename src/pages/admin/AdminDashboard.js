@@ -1,4 +1,4 @@
-// src/pages/admin/AdminDashboard.js - نسخة كاملة مع إصلاح الحلقات
+// src/pages/admin/AdminDashboard.js - نسخة كاملة مع TMDB Integration + i18n
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { 
@@ -8,8 +8,10 @@ import {
   FaClosedCaptioning, FaMicrophoneAlt, FaList, FaChevronDown, 
   FaChevronUp, FaTrashAlt, FaMusic, FaQuran, FaChartLine, 
   FaComment, FaDatabase, FaUserShield, FaImage, FaUpload,
-  FaSyncAlt, FaCheck, FaExclamationTriangle,  FaBookmark
+  FaSyncAlt, FaCheck, FaExclamationTriangle, FaBookmark,
+  FaDownload
 } from 'react-icons/fa';
+import { useLanguage } from '../../context/LanguageContext';
 import AdminClipsManager from './AdminClipsManager';
 import AdminRecitersManager from './AdminRecitersManager';
 import AdminSongsManager from './AdminSongsManager';
@@ -21,8 +23,12 @@ import AdminRoles from './AdminRoles';
 import AdminChannelsManager from './AdminChannelsManager';
 import { moviesAPI, seriesAPI, channelsAPI } from '../../services/api';
 
+// ⚠️ غيّر هذا الرابط إلى IP/domain الخاص بخادمك
+const API_BASE_URL = 'http://192.168.11.88:5000';
+
 const AdminDashboard = () => {
   // ========== STATES ==========
+  const { t, language } = useLanguage();
   const [activeTab, setActiveTab] = useState('dashboard');
   const [showModal, setShowModal] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
@@ -33,6 +39,16 @@ const AdminDashboard = () => {
   const [isMobile, setIsMobile] = useState(window.innerWidth < 1024);
   const [saveError, setSaveError] = useState('');
   const [refreshKey, setRefreshKey] = useState(0);
+  
+  // ========== TMDB STATES ==========
+  const [showTMDBModal, setShowTMDBModal] = useState(false);
+  const [tmdbSearchQuery, setTmdbSearchQuery] = useState('');
+  const [tmdbSearchType, setTmdbSearchType] = useState('multi');
+  const [tmdbResults, setTmdbResults] = useState([]);
+  const [tmdbLoading, setTmdbLoading] = useState(false);
+  const [tmdbLoadingDetails, setTmdbLoadingDetails] = useState(false);
+  const [selectedTMDBItem, setSelectedTMDBItem] = useState(null);
+  const [tmdbError, setTmdbError] = useState('');
   
   // ========== DATA STATES ==========
   const [arabwoodMovies, setArabwoodMovies] = useState([]);
@@ -96,31 +112,31 @@ const AdminDashboard = () => {
   const countries = ['Egypte', 'Maroc', 'USA', 'UK', 'France', 'Inde', 'Turquie', 'Coree du Sud', 'Arabie Saoudite', 'Emirats Arabes Unis', 'Liban', 'Jordanie', 'Syrie', 'Irak', 'Algerie', 'Tunisie', 'Japon', 'Chine'];
 
   const channelCategories = [
-    { id: 'arabic', label: 'عربية' },
-    { id: 'foreign', label: 'أجنبية' },
-    { id: 'sports', label: 'رياضية' },
-    { id: 'movies', label: 'أفلام' },
-    { id: 'kids', label: 'أطفال' },
-    { id: 'religious', label: 'دينية' },
-    { id: 'music', label: 'موسيقى' },
-    { id: 'news', label: 'أخبار' }
+    { id: 'arabic', labelKey: 'channels.arabic' },
+    { id: 'foreign', labelKey: 'channels.foreign' },
+    { id: 'sports', labelKey: 'channels.sports' },
+    { id: 'movies', labelKey: 'channels.movies' },
+    { id: 'kids', labelKey: 'channels.kids' },
+    { id: 'religious', labelKey: 'channels.religious' },
+    { id: 'music', labelKey: 'channels.music' },
+    { id: 'news', labelKey: 'channels.news' }
   ];
 
   // ========== قائمة التصنيفات ==========
   const getMenuCategories = useCallback(() => [
-    { id: 'arabwood', label: 'أفلام عربية', icon: '🇸🇦', count: arabwoodMovies.length, type: 'movie' },
-    { id: 'hollywood', label: 'Hollywood', icon: '🇺🇸', count: hollywoodMovies.length, type: 'movie' },
-    { id: 'bollywood', label: 'Bollywood', icon: '🇮🇳', count: bollywoodMovies.length, type: 'movie' },
-    { id: 'european', label: 'أفلام أوروبية', icon: '🇪🇺', count: europeanMovies.length, type: 'movie' },
-    { id: 'asian', label: 'أفلام آسيوية', icon: '🇯🇵', count: asianMovies.length, type: 'movie' },
-    { id: 'animation_movies', label: 'أفلام رسوم متحركة', icon: '🎨', count: animationMovies.length, type: 'movie' },
-    { id: 'arabicseries', label: 'مسلسلات عربية', icon: '🇸🇦', count: arabicSeries.length, type: 'series' },
-    { id: 'foreignseries', label: 'مسلسلات أجنبية', icon: '🌍', count: foreignSeries.length, type: 'series' },
-    { id: 'indianseries', label: 'مسلسلات هندية', icon: '🇮🇳', count: indianSeries.length, type: 'series' },
-    { id: 'turkishseries', label: 'مسلسلات تركية', icon: '🇹🇷', count: turkishSeries.length, type: 'series' },
-    { id: 'koreanseries', label: 'دراما كورية', icon: '🇰🇷', count: koreanSeries.length, type: 'series' },
-    { id: 'animation_series', label: 'مسلسلات رسوم متحركة', icon: '🎨', count: animationSeries.length, type: 'series' },
-    { id: 'channels', label: 'قنوات TV', icon: '📺', count: channels.length, type: 'channel' },
+    { id: 'arabwood', labelKey: 'nav.arabwood', icon: '🇸🇦', count: arabwoodMovies.length, type: 'movie' },
+    { id: 'hollywood', labelKey: 'nav.hollywood', icon: '🇺🇸', count: hollywoodMovies.length, type: 'movie' },
+    { id: 'bollywood', labelKey: 'nav.bollywood', icon: '🇮🇳', count: bollywoodMovies.length, type: 'movie' },
+    { id: 'european', labelKey: 'nav.european', icon: '🇪🇺', count: europeanMovies.length, type: 'movie' },
+    { id: 'asian', labelKey: 'nav.asian', icon: '🇯🇵', count: asianMovies.length, type: 'movie' },
+    { id: 'animation_movies', labelKey: 'nav.animation', icon: '🎨', count: animationMovies.length, type: 'movie' },
+    { id: 'arabicseries', labelKey: 'nav.arabicSeries', icon: '🇸🇦', count: arabicSeries.length, type: 'series' },
+    { id: 'foreignseries', labelKey: 'nav.foreignSeries', icon: '🌍', count: foreignSeries.length, type: 'series' },
+    { id: 'indianseries', labelKey: 'nav.indianSeries', icon: '🇮🇳', count: indianSeries.length, type: 'series' },
+    { id: 'turkishseries', labelKey: 'nav.turkishSeries', icon: '🇹🇷', count: turkishSeries.length, type: 'series' },
+    { id: 'koreanseries', labelKey: 'nav.koreanSeries', icon: '🇰🇷', count: koreanSeries.length, type: 'series' },
+    { id: 'animation_series', labelKey: 'nav.animation', icon: '🎨', count: animationSeries.length, type: 'series' },
+    { id: 'channels', labelKey: 'nav.channels', icon: '📺', count: channels.length, type: 'channel' },
   ], [arabwoodMovies, hollywoodMovies, bollywoodMovies, europeanMovies, asianMovies, animationMovies, arabicSeries, foreignSeries, indianSeries, turkishSeries, koreanSeries, animationSeries, channels]);
 
   const menuCategories = getMenuCategories();
@@ -204,7 +220,7 @@ const AdminDashboard = () => {
   const loadSeriesByCategory = async (category, setter) => {
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch(`http://192.168.11.88:5000/api/series/category/${category}`, {
+      const response = await fetch(`${API_BASE_URL}/api/series/category/${category}`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       const data = await response.json();
@@ -212,7 +228,7 @@ const AdminDashboard = () => {
       const seriesWithEpisodes = await Promise.all(
         data.map(async (series) => {
           try {
-            const episodesRes = await fetch(`http://192.168.11.88:5000/api/series/${series.id}`, {
+            const episodesRes = await fetch(`${API_BASE_URL}/api/series/${series.id}`, {
               headers: { 'Authorization': `Bearer ${token}` }
             });
             const seriesDetail = await episodesRes.json();
@@ -223,7 +239,6 @@ const AdminDashboard = () => {
         })
       );
       
-      console.log(`✅ تم تحميل ${seriesWithEpisodes.length} مسلسل من ${category}`);
       setter(seriesWithEpisodes);
       return seriesWithEpisodes;
     } catch (error) {
@@ -245,10 +260,7 @@ const AdminDashboard = () => {
     }
   };
 
-  // ========== تحديث جميع البيانات ==========
   const refreshAllData = useCallback(async () => {
-    console.log('🔄 تحديث جميع البيانات...');
-    
     await Promise.all([
       loadMoviesByCategory('arabwood', setArabwoodMovies),
       loadMoviesByCategory('hollywood', setHollywoodMovies),
@@ -266,7 +278,6 @@ const AdminDashboard = () => {
     ]);
     
     setRefreshKey(prev => prev + 1);
-    console.log('✅ تم تحديث جميع البيانات');
   }, []);
 
   useEffect(() => {
@@ -297,18 +308,17 @@ const AdminDashboard = () => {
   
   const removeAudioTrack = (index) => setAudioTracksList(audioTracksList.filter((_, i) => i !== index));
 
-  // ✅ إضافة حلقة جديدة مع التأكد من وجود رقم الحلقة
   const addEpisode = () => {
     if (!episodeFormData.number || episodeFormData.number === '') {
-      alert('⚠️ الرجاء إدخال رقم الحلقة');
+      alert('⚠️ ' + t('admin.episode.number'));
       return;
     }
     if (!episodeFormData.title || episodeFormData.title === '') {
-      alert('⚠️ الرجاء إدخال عنوان الحلقة');
+      alert('⚠️ ' + t('admin.episode.title'));
       return;
     }
     if (!episodeFormData.videoUrl || episodeFormData.videoUrl === '') {
-      alert('⚠️ الرجاء إدخال رابط الفيديو');
+      alert('⚠️ ' + t('admin.episode.videoUrl'));
       return;
     }
     
@@ -327,7 +337,6 @@ const AdminDashboard = () => {
       audioTracks: episodeAudioTracks 
     };
     
-    console.log('➕ إضافة حلقة جديدة:', newEpisode);
     setEpisodesList([...episodesList, newEpisode]);
     setShowEpisodeModal(false);
     setEpisodeFormData({ number: '', title: '', titleFr: '', titleAr: '', duration: '', videoUrl: '', thumbnail: '', description: '', season_num: 1 });
@@ -363,31 +372,182 @@ const AdminDashboard = () => {
   
   const removeEpisodeAudio = (index) => setEpisodeAudioTracks(episodeAudioTracks.filter((_, i) => i !== index));
 
+  // ============================================================
+  // ========== TMDB FUNCTIONS ==========
+  // ============================================================
+  
+  const searchInTMDB = async () => {
+    if (!tmdbSearchQuery.trim()) {
+      setTmdbError(t('admin.tmdb.search'));
+      return;
+    }
+
+    setTmdbLoading(true);
+    setTmdbError('');
+    setTmdbResults([]);
+
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(
+        `${API_BASE_URL}/api/tmdb/search?query=${encodeURIComponent(tmdbSearchQuery)}&type=${tmdbSearchType}&language=fr`,
+        { headers: { 'Authorization': `Bearer ${token}` } }
+      );
+
+      const data = await response.json();
+      
+      if (data.success) {
+        setTmdbResults(data.results);
+        if (data.results.length === 0) setTmdbError(t('search.noResults'));
+      } else {
+        setTmdbError(data.message || t('common.error'));
+      }
+    } catch (error) {
+      console.error('❌ TMDB Search Error:', error);
+      setTmdbError(t('common.error'));
+    } finally {
+      setTmdbLoading(false);
+    }
+  };
+
+  const fetchTMDBDetails = async (tmdbId, mediaType) => {
+    setTmdbLoadingDetails(true);
+    setTmdbError('');
+
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(
+        `${API_BASE_URL}/api/tmdb/details/${mediaType}/${tmdbId}?language=fr`,
+        { headers: { 'Authorization': `Bearer ${token}` } }
+      );
+
+      const data = await response.json();
+
+      if (!data.success) throw new Error(data.message || t('common.error'));
+
+      const tmdbData = data.data;
+      setSelectedTMDBItem(tmdbData);
+
+      setFormData({
+        id: '',
+        title: tmdbData.title_ar || tmdbData.title || '',
+        titleAr: tmdbData.title_ar || '',
+        titleFr: tmdbData.title_en || '',
+        poster: tmdbData.poster || '',
+        backdrop: tmdbData.backdrop || '',
+        videoUrl: '',
+        rating: tmdbData.rating || '',
+        year: tmdbData.year || '',
+        genre: tmdbData.genre || '',
+        duration: tmdbData.duration || '',
+        country: tmdbData.country_name || tmdbData.country || '',
+        director: tmdbData.director || '',
+        cast: tmdbData.cast || '',
+        description: tmdbData.description_ar || tmdbData.description || '',
+        descriptionFr: tmdbData.description_en || '',
+        descriptionAr: tmdbData.description_ar || '',
+        subtitles: [],
+        defaultSubtitle: '',
+        audioTracks: [],
+        defaultAudio: '',
+        seasons: tmdbData.seasons || 1
+      });
+
+      setSubtitlesList([]);
+      setAudioTracksList([]);
+      setEpisodesList([]);
+
+      if (mediaType === 'tv' && tmdbData.seasons_data?.length > 0) {
+        await loadTMDBSeasons(tmdbId);
+      }
+
+      setShowTMDBModal(false);
+      setEditingItem(null);
+      setShowModal(true);
+
+      showNotification(`✅ ${tmdbData.title}`, 'success');
+
+    } catch (error) {
+      console.error('❌ TMDB Details Error:', error);
+      setTmdbError(error.message || t('common.error'));
+      showNotification('❌ ' + t('common.error'), 'error');
+    } finally {
+      setTmdbLoadingDetails(false);
+    }
+  };
+
+  const loadTMDBSeasons = async (seriesId) => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(
+        `${API_BASE_URL}/api/tmdb/seasons/${seriesId}?language=fr`,
+        { headers: { 'Authorization': `Bearer ${token}` } }
+      );
+
+      const data = await response.json();
+      
+      if (data.success && data.seasons) {
+        const allEpisodes = [];
+        
+        for (const season of data.seasons) {
+          if (season.season_number === 0) continue;
+          
+          (season.episodes || []).forEach(ep => {
+            allEpisodes.push({
+              id: Date.now() + Math.random(),
+              number: ep.episode_number,
+              season_num: ep.season_number,
+              title: ep.title || `${t('movie.episode')} ${ep.episode_number}`,
+              titleAr: ep.title || `${t('movie.episode')} ${ep.episode_number}`,
+              titleFr: '',
+              duration: ep.duration || '',
+              videoUrl: '',
+              thumbnail: ep.thumbnail || '',
+              description: ep.description || '',
+              subtitles: [],
+              audioTracks: []
+            });
+          });
+        }
+        
+        if (allEpisodes.length > 0) {
+          setEpisodesList(allEpisodes);
+          showNotification(`✅ ${allEpisodes.length} ${t('series.episodes')}`, 'success');
+        }
+      }
+    } catch (error) {
+      console.error('❌ خطأ في جلب المواسم:', error);
+    }
+  };
+
+  const handleTMDBKeyPress = (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      searchInTMDB();
+    }
+  };
+
   // ========== دوال CRUD ==========
   const handleDelete = async (id) => {
-    if (!window.confirm('هل أنت متأكد من حذف هذا المحتوى؟')) return;
+    if (!window.confirm(t('admin.actions.areYouSure'))) return;
     
     try {
       if (activeTab === 'channels') {
         await channelsAPI.deleteChannel(id);
-        await loadChannels();
       } else if (isSeries()) {
         await seriesAPI.deleteSeries(id);
-        await loadSeriesByCategory(getSeriesCategory(activeTab), getSetterByTab(activeTab));
       } else {
         await moviesAPI.deleteMovie(id);
-        const category = activeTab === 'animation_movies' ? 'animation' : activeTab;
-        await loadMoviesByCategory(category, getSetterByTab(activeTab));
       }
       await refreshAllData();
     } catch (error) {
       console.error('خطأ في الحذف:', error);
-      alert('حدث خطأ في الحذف');
+      alert(t('common.error'));
     }
   };
 
   const handleEdit = async (item) => {
     setEditingItem(item);
+    setSelectedTMDBItem(null);
     setFormData({
         id: item.id, 
         title: item.title || '', 
@@ -428,9 +588,7 @@ const AdminDashboard = () => {
         url: track.url
     })));
     
-    // ✅ تحميل الحلقات الموجودة
     if (item.episodes && Array.isArray(item.episodes)) {
-        console.log(`📺 تحميل ${item.episodes.length} حلقة للتعديل`);
         setEpisodesList(item.episodes.map(ep => ({
             id: ep.id,
             number: ep.episode_num || ep.number,
@@ -448,7 +606,7 @@ const AdminDashboard = () => {
     }
     
     setShowModal(true);
-};
+  };
 
   const resetForm = () => {
     setFormData({
@@ -461,17 +619,17 @@ const AdminDashboard = () => {
     setAudioTracksList([]);
     setEpisodesList([]);
     setSaveError('');
+    setSelectedTMDBItem(null);
   };
 
   const showNotification = (message, type = 'success') => {
     const toast = document.createElement('div');
-    toast.className = `fixed bottom-4 right-4 ${type === 'success' ? 'bg-green-600' : 'bg-red-600'} text-white px-4 py-2 rounded-lg shadow-lg z-50 text-sm animate-fadeIn`;
+    toast.className = `fixed bottom-4 right-4 ${type === 'success' ? 'bg-green-600' : 'bg-red-600'} text-white px-4 py-2 rounded-lg shadow-lg z-50 text-sm`;
     toast.textContent = message;
     document.body.appendChild(toast);
     setTimeout(() => toast.remove(), 3000);
   };
 
-  // ========== دالة الحفظ الرئيسية ==========
   const handleSubmit = async (e) => {
     e.preventDefault();
     setSaving(true);
@@ -487,7 +645,6 @@ const AdminDashboard = () => {
         category = getSeriesCategory(activeTab);
     }
     
-    // بناء البيانات الأساسية
     const newItem = {
         title: formData.title || null,
         title_ar: formData.titleAr || null,
@@ -507,14 +664,12 @@ const AdminDashboard = () => {
         cast: formData.cast || null,
         category: category,
         seasons: isSeriesTab ? (formData.seasons ? parseInt(formData.seasons) : 1) : undefined,
-        // ✅ إضافة الترجمات (من subtitlesList)
         subtitles: subtitlesList.map(sub => ({
             language: sub.lang,
             label: sub.label,
             url: sub.url,
             is_default: formData.defaultSubtitle === sub.lang ? 1 : 0
         })),
-        // ✅ إضافة المسارات الصوتية (من audioTracksList)
         audioTracks: audioTracksList.map(track => ({
             language: track.lang,
             label: track.label,
@@ -523,7 +678,6 @@ const AdminDashboard = () => {
         }))
     };
     
-    // ✅ إضافة الحلقات إذا كان مسلسل
     if (isSeriesTab && episodesList.length > 0) {
         newItem.episodes = episodesList.map(ep => ({
             season_num: ep.season_num || 1,
@@ -536,30 +690,23 @@ const AdminDashboard = () => {
             duration: ep.duration || null,
             thumbnail: ep.thumbnail || null
         }));
-        console.log(`📺 إرسال ${newItem.episodes.length} حلقة مع البيانات`);
     }
     
-    console.log('📤 البيانات المرسلة:', JSON.stringify(newItem, null, 2));
-    
     try {
-        let response;
-        
         if (editingItem) {
             if (isSeriesTab) {
-                console.log(`🔄 تحديث المسلسل ${editingItem.id} مع ${newItem.episodes?.length || 0} حلقة`);
-                response = await seriesAPI.updateSeries(editingItem.id, newItem);
+                await seriesAPI.updateSeries(editingItem.id, newItem);
             } else {
-                response = await moviesAPI.updateMovie(editingItem.id, newItem);
+                await moviesAPI.updateMovie(editingItem.id, newItem);
             }
-            showNotification('تم التعديل بنجاح', 'success');
+            showNotification('✅ ' + t('common.success'), 'success');
         } else {
             if (isSeriesTab) {
-                console.log('📺 جاري إضافة مسلسل جديد...');
-                response = await seriesAPI.addSeries(newItem);
-                showNotification('تمت إضافة المسلسل بنجاح', 'success');
+                await seriesAPI.addSeries(newItem);
+                showNotification('✅ ' + t('common.success'), 'success');
             } else if (isMovieTab) {
-                response = await moviesAPI.addMovie(newItem);
-                showNotification('تمت إضافة الفيلم بنجاح', 'success');
+                await moviesAPI.addMovie(newItem);
+                showNotification('✅ ' + t('common.success'), 'success');
             }
         }
         
@@ -572,11 +719,11 @@ const AdminDashboard = () => {
         console.error('❌ خطأ في الحفظ:', error);
         const errorMsg = error.response?.data?.message || error.message;
         setSaveError(errorMsg);
-        showNotification('حدث خطأ في حفظ البيانات: ' + errorMsg, 'error');
+        showNotification('❌ ' + t('common.error') + ': ' + errorMsg, 'error');
     } finally {
         setSaving(false);
     }
-};
+  };
 
   // ========== دوال القنوات ==========
   const handleChannelSubmit = async (e) => {
@@ -597,15 +744,14 @@ const AdminDashboard = () => {
       } else {
         await channelsAPI.addChannel(newChannel);
       }
-      await loadChannels();
       await refreshAllData();
-      showNotification('تم حفظ القناة بنجاح', 'success');
+      showNotification('✅ ' + t('common.success'), 'success');
       setShowModal(false);
       setEditingItem(null);
       setChannelFormData({ id: '', name: '', nameAr: '', logo: '', url: '', category: 'arabic' });
     } catch (error) {
       console.error('خطأ في حفظ القناة:', error);
-      showNotification('حدث خطأ في حفظ القناة', 'error');
+      showNotification('❌ ' + t('common.error'), 'error');
     } finally {
       setSaving(false);
     }
@@ -663,13 +809,12 @@ const AdminDashboard = () => {
       <div className="flex justify-center items-center h-screen bg-black">
         <div className="text-center">
           <div className="w-12 h-12 border-4 border-red-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-gray-400">جاري تحميل لوحة التحكم...</p>
+          <p className="text-gray-400">{t('common.loading')}</p>
         </div>
       </div>
     );
   }
-
-  return (
+    return (
     <div className="min-h-screen bg-black" key={refreshKey}>
       {/* Header */}
       <header className="bg-gray-900 border-b border-gray-800 sticky top-0 z-40">
@@ -682,16 +827,16 @@ const AdminDashboard = () => {
               <FaTachometerAlt className="text-white text-base sm:text-xl" />
             </div>
             <div>
-              <h1 className="text-base sm:text-lg md:text-xl font-bold text-white">Admin Dashboard</h1>
-              <p className="text-gray-500 text-[10px] sm:text-xs hidden sm:block">التحكم الكامل في منصة CineWave</p>
+              <h1 className="text-base sm:text-lg md:text-xl font-bold text-white">{t('admin.adminPanel')}</h1>
+              <p className="text-gray-500 text-[10px] sm:text-xs hidden sm:block">{t('admin.fullControl')}</p>
             </div>
           </div>
           <div className="flex items-center gap-2 sm:gap-3">
             <Link to="/" className="px-2 sm:px-3 md:px-4 py-1.5 sm:py-2 bg-gray-800 rounded-lg text-gray-300 hover:text-white hover:bg-gray-700 transition flex items-center gap-1 sm:gap-2 text-xs sm:text-sm">
-              <FaHome className="text-sm sm:text-base" /><span className="hidden sm:inline">العودة للموقع</span>
+              <FaHome className="text-sm sm:text-base" /><span className="hidden sm:inline">{t('admin.backToSite')}</span>
             </Link>
             <button onClick={handleLogout} className="px-2 sm:px-3 md:px-4 py-1.5 sm:py-2 bg-red-600 rounded-lg text-white hover:bg-red-700 transition flex items-center gap-1 sm:gap-2 text-xs sm:text-sm">
-              <FaSignOutAlt className="text-sm sm:text-base" /><span className="hidden sm:inline">خروج</span>
+              <FaSignOutAlt className="text-sm sm:text-base" /><span className="hidden sm:inline">{t('admin.logout')}</span>
             </button>
           </div>
         </div>
@@ -709,97 +854,87 @@ const AdminDashboard = () => {
                   <FaUser className="text-red-400 text-base sm:text-lg" />
                 </div>
                 <div>
-                  <p className="text-white font-semibold text-sm">المشرف العام</p>
+                  <p className="text-white font-semibold text-sm">{t('admin.users.role.admin')}</p>
                   <p className="text-gray-500 text-[10px] sm:text-xs">mohcine@akiltv.com</p>
                 </div>
               </div>
             </div>
             
             <button onClick={() => { setActiveTab('dashboard'); if(isMobile) setSidebarOpen(false); }} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl mb-2 transition text-sm sm:text-base ${activeTab === 'dashboard' ? 'bg-red-600 text-white' : 'text-gray-400 hover:bg-gray-800 hover:text-white'}`}>
-              <FaTachometerAlt className="text-base sm:text-lg" /><span>لوحة التحكم</span>
+              <FaTachometerAlt className="text-base sm:text-lg" /><span>{t('admin.menu.dashboard')}</span>
             </button>
             
-            <div className="mt-4 mb-2"><p className="text-[10px] sm:text-xs text-gray-600 px-3">🎬 الأفلام</p></div>
+            <div className="mt-4 mb-2"><p className="text-[10px] sm:text-xs text-gray-600 px-3">{t('admin.sections.movies')}</p></div>
             {menuCategories.filter(c => c.type === 'movie').map(cat => (
               <button key={cat.id} onClick={() => { setActiveTab(cat.id); if(isMobile) setSidebarOpen(false); }} className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl mb-1 transition text-sm ${activeTab === cat.id ? 'bg-gray-800 text-white border-r-2 border-red-500' : 'text-gray-400 hover:bg-gray-800 hover:text-white'}`}>
                 <span className="text-base sm:text-lg">{cat.icon}</span>
-                <span className="flex-1 text-right text-sm">{cat.label}</span>
+                <span className="flex-1 text-right text-sm">{t(cat.labelKey)}</span>
                 <span className="text-[10px] sm:text-xs bg-gray-700 px-1.5 sm:px-2 py-0.5 rounded-full">{cat.count}</span>
               </button>
             ))}
             
-            <div className="mt-4 mb-2"><p className="text-[10px] sm:text-xs text-gray-600 px-3">📺 المسلسلات</p></div>
+            <div className="mt-4 mb-2"><p className="text-[10px] sm:text-xs text-gray-600 px-3">{t('admin.sections.series')}</p></div>
             {menuCategories.filter(c => c.type === 'series').map(cat => (
               <button key={cat.id} onClick={() => { setActiveTab(cat.id); if(isMobile) setSidebarOpen(false); }} className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl mb-1 transition text-sm ${activeTab === cat.id ? 'bg-gray-800 text-white border-r-2 border-red-500' : 'text-gray-400 hover:bg-gray-800 hover:text-white'}`}>
                 <span className="text-base sm:text-lg">{cat.icon}</span>
-                <span className="flex-1 text-right text-sm">{cat.label}</span>
+                <span className="flex-1 text-right text-sm">{t(cat.labelKey)}</span>
                 <span className="text-[10px] sm:text-xs bg-gray-700 px-1.5 sm:px-2 py-0.5 rounded-full">{cat.count}</span>
               </button>
             ))}
             
-            <div className="mt-4 mb-2"><p className="text-[10px] sm:text-xs text-gray-600 px-3">📡 القنوات</p></div>
+            <div className="mt-4 mb-2"><p className="text-[10px] sm:text-xs text-gray-600 px-3">{t('admin.sections.channels')}</p></div>
             <button onClick={() => { setActiveTab('channels'); if(isMobile) setSidebarOpen(false); }} className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl mb-1 transition text-sm ${activeTab === 'channels' ? 'bg-gray-800 text-white border-r-2 border-red-500' : 'text-gray-400 hover:bg-gray-800 hover:text-white'}`}>
               <span className="text-base sm:text-lg">📺</span>
-              <span className="flex-1 text-right text-sm">قنوات TV</span>
+              <span className="flex-1 text-right text-sm">{t('admin.menu.channelsTV')}</span>
               <span className="text-[10px] sm:text-xs bg-gray-700 px-1.5 sm:px-2 py-0.5 rounded-full">{channels.length}</span>
             </button>
 
-            <div className="mt-4 mb-2"><p className="text-[10px] sm:text-xs text-gray-600 px-3">🎵 الكليبات</p></div>
+            <div className="mt-4 mb-2"><p className="text-[10px] sm:text-xs text-gray-600 px-3">{t('admin.sections.clips')}</p></div>
             <button onClick={() => { setActiveTab('clips'); if(isMobile) setSidebarOpen(false); }} className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl mb-1 transition text-sm ${activeTab === 'clips' ? 'bg-gray-800 text-white border-r-2 border-red-500' : 'text-gray-400 hover:bg-gray-800 hover:text-white'}`}>
-              <FaMusic className="text-base sm:text-lg" /><span>إدارة الكليبات</span>
+              <FaMusic className="text-base sm:text-lg" /><span>{t('admin.menu.manageClips')}</span>
             </button>
 
-            <div className="mt-4 mb-2"><p className="text-[10px] sm:text-xs text-gray-600 px-3">🎵 الأغاني</p></div>
+            <div className="mt-4 mb-2"><p className="text-[10px] sm:text-xs text-gray-600 px-3">{t('admin.sections.songs')}</p></div>
             <button onClick={() => { setActiveTab('songs'); if(isMobile) setSidebarOpen(false); }} className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl mb-1 transition text-sm ${activeTab === 'songs' ? 'bg-gray-800 text-white border-r-2 border-red-500' : 'text-gray-400 hover:bg-gray-800 hover:text-white'}`}>
-              <FaMusic className="text-base sm:text-lg" /><span>إدارة الأغاني</span>
+              <FaMusic className="text-base sm:text-lg" /><span>{t('admin.menu.manageSongs')}</span>
             </button>
 
-            <div className="mt-4 mb-2"><p className="text-[10px] sm:text-xs text-gray-600 px-3">🕌 القرآن</p></div>
+            <div className="mt-4 mb-2"><p className="text-[10px] sm:text-xs text-gray-600 px-3">{t('admin.sections.quran')}</p></div>
             <button onClick={() => { setActiveTab('reciters'); if(isMobile) setSidebarOpen(false); }} className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl mb-1 transition text-sm ${activeTab === 'reciters' ? 'bg-gray-800 text-white border-r-2 border-red-500' : 'text-gray-400 hover:bg-gray-800 hover:text-white'}`}>
-              <FaQuran className="text-base sm:text-lg" /><span>إدارة القراء</span>
+              <FaQuran className="text-base sm:text-lg" /><span>{t('admin.menu.manageReciters')}</span>
             </button>
 
-            // src/pages/admin/AdminDashboard.js
-// ... في قسم Sidebar
-
-<div className="mt-4 mb-2">
-  <p className="text-[10px] sm:text-xs text-gray-600 px-3">📋 القوائم</p>
-</div>
-
-{/* ✅ زر قائمتي */}
-<button 
-  onClick={() => { 
-    navigate('/mylist'); 
-    if(isMobile) setSidebarOpen(false); 
-  }} 
-  className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl mb-1 transition text-sm ${activeTab === 'mylist' ? 'bg-gray-800 text-white border-r-2 border-purple-500' : 'text-gray-400 hover:bg-gray-800 hover:text-white'}`}
->
-  <FaBookmark className="text-base sm:text-lg text-purple-400" />
-  <span className="flex-1 text-right text-sm">قائمتي</span>
-</button>
+            <div className="mt-4 mb-2"><p className="text-[10px] sm:text-xs text-gray-600 px-3">{t('admin.sections.lists')}</p></div>
+            <button 
+              onClick={() => { navigate('/mylist'); if(isMobile) setSidebarOpen(false); }} 
+              className="w-full flex items-center gap-3 px-3 py-2 rounded-xl mb-1 transition text-sm text-gray-400 hover:bg-gray-800 hover:text-white"
+            >
+              <FaBookmark className="text-base sm:text-lg text-purple-400" />
+              <span className="flex-1 text-right text-sm">{t('admin.menu.myList')}</span>
+            </button>
             
-            <div className="mt-4 mb-2"><p className="text-[10px] sm:text-xs text-gray-600 px-3">📊 التقارير</p></div>
+            <div className="mt-4 mb-2"><p className="text-[10px] sm:text-xs text-gray-600 px-3">{t('admin.sections.reports')}</p></div>
             <button onClick={() => { setActiveTab('statistics'); if(isMobile) setSidebarOpen(false); }} className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl mb-1 transition text-sm ${activeTab === 'statistics' ? 'bg-gray-800 text-white border-r-2 border-red-500' : 'text-gray-400 hover:bg-gray-800 hover:text-white'}`}>
-              <FaChartLine className="text-base sm:text-lg" /><span>الإحصائيات المتقدمة</span>
+              <FaChartLine className="text-base sm:text-lg" /><span>{t('admin.menu.advancedStats')}</span>
             </button>
 
-            <div className="mt-4 mb-2"><p className="text-[10px] sm:text-xs text-gray-600 px-3">💬 التفاعل</p></div>
+            <div className="mt-4 mb-2"><p className="text-[10px] sm:text-xs text-gray-600 px-3">{t('admin.sections.interaction')}</p></div>
             <button onClick={() => { setActiveTab('comments'); if(isMobile) setSidebarOpen(false); }} className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl mb-1 transition text-sm ${activeTab === 'comments' ? 'bg-gray-800 text-white border-r-2 border-red-500' : 'text-gray-400 hover:bg-gray-800 hover:text-white'}`}>
-              <FaComment className="text-base sm:text-lg" /><span>إدارة التعليقات</span>
+              <FaComment className="text-base sm:text-lg" /><span>{t('admin.menu.manageComments')}</span>
             </button>
 
-            <div className="mt-4 mb-2"><p className="text-[10px] sm:text-xs text-gray-600 px-3">💾 النظام</p></div>
+            <div className="mt-4 mb-2"><p className="text-[10px] sm:text-xs text-gray-600 px-3">{t('admin.sections.system')}</p></div>
             <button onClick={() => { setActiveTab('backup'); if(isMobile) setSidebarOpen(false); }} className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl mb-1 transition text-sm ${activeTab === 'backup' ? 'bg-gray-800 text-white border-r-2 border-red-500' : 'text-gray-400 hover:bg-gray-800 hover:text-white'}`}>
-              <FaDatabase className="text-base sm:text-lg" /><span>النسخ الاحتياطي</span>
+              <FaDatabase className="text-base sm:text-lg" /><span>{t('admin.menu.backup')}</span>
             </button>
             
             <button onClick={() => { setActiveTab('roles'); if(isMobile) setSidebarOpen(false); }} className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl mb-1 transition text-sm ${activeTab === 'roles' ? 'bg-gray-800 text-white border-r-2 border-red-500' : 'text-gray-400 hover:bg-gray-800 hover:text-white'}`}>
-              <FaUserShield className="text-base sm:text-lg" /><span>إدارة الصلاحيات</span>
+              <FaUserShield className="text-base sm:text-lg" /><span>{t('admin.menu.roles')}</span>
             </button>
 
-            <div className="mt-4 mb-2"><p className="text-[10px] sm:text-xs text-gray-600 px-3">👥 المستخدمين</p></div>
+            <div className="mt-4 mb-2"><p className="text-[10px] sm:text-xs text-gray-600 px-3">{t('admin.sections.users')}</p></div>
             <button onClick={() => { setActiveTab('users'); if(isMobile) setSidebarOpen(false); }} className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl mb-1 transition text-sm ${activeTab === 'users' ? 'bg-gray-800 text-white border-r-2 border-red-500' : 'text-gray-400 hover:bg-gray-800 hover:text-white'}`}>
-              <FaUsers className="text-base sm:text-lg" /><span>إدارة المستخدمين</span>
+              <FaUsers className="text-base sm:text-lg" /><span>{t('admin.menu.manageUsers')}</span>
             </button>
           </div>
         </aside>
@@ -815,22 +950,22 @@ const AdminDashboard = () => {
               <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-6 sm:mb-8">
                 <div className="bg-gray-900 rounded-xl p-3 sm:p-5 border border-gray-800">
                   <div className="flex items-center justify-between mb-2"><FaFilm className="text-purple-400 text-xl sm:text-2xl" /><span className="text-green-400 text-[10px] sm:text-sm">+{totalMovies}</span></div>
-                  <p className="text-gray-500 text-[10px] sm:text-sm">إجمالي الأفلام</p>
+                  <p className="text-gray-500 text-[10px] sm:text-sm">{t('admin.totalMovies')}</p>
                   <p className="text-white text-xl sm:text-2xl font-bold">{totalMovies}</p>
                 </div>
                 <div className="bg-gray-900 rounded-xl p-3 sm:p-5 border border-gray-800">
                   <div className="flex items-center justify-between mb-2"><FaTv className="text-blue-400 text-xl sm:text-2xl" /><span className="text-green-400 text-[10px] sm:text-sm">+{totalSeries}</span></div>
-                  <p className="text-gray-500 text-[10px] sm:text-sm">إجمالي المسلسلات</p>
+                  <p className="text-gray-500 text-[10px] sm:text-sm">{t('admin.totalSeries')}</p>
                   <p className="text-white text-xl sm:text-2xl font-bold">{totalSeries}</p>
                 </div>
                 <div className="bg-gray-900 rounded-xl p-3 sm:p-5 border border-gray-800">
                   <div className="flex items-center justify-between mb-2"><FaChannel className="text-green-400 text-xl sm:text-2xl" /><span className="text-green-400 text-[10px] sm:text-sm">+{channels.length}</span></div>
-                  <p className="text-gray-500 text-[10px] sm:text-sm">إجمالي القنوات</p>
+                  <p className="text-gray-500 text-[10px] sm:text-sm">{t('admin.totalChannels')}</p>
                   <p className="text-white text-xl sm:text-2xl font-bold">{channels.length}</p>
                 </div>
                 <div className="bg-gray-900 rounded-xl p-3 sm:p-5 border border-gray-800">
                   <div className="flex items-center justify-between mb-2"><FaStar className="text-yellow-400 text-xl sm:text-2xl" /><span className="text-green-400 text-[10px] sm:text-sm">★</span></div>
-                  <p className="text-gray-500 text-[10px] sm:text-sm">متوسط التقييم</p>
+                  <p className="text-gray-500 text-[10px] sm:text-sm">{t('admin.avgRating')}</p>
                   <p className="text-white text-xl sm:text-2xl font-bold">8.4</p>
                 </div>
               </div>
@@ -838,8 +973,8 @@ const AdminDashboard = () => {
                 {menuCategories.map(cat => (
                   <button key={cat.id} onClick={() => setActiveTab(cat.id)} className="bg-gray-900 rounded-xl p-3 sm:p-4 text-center hover:bg-gray-800 transition border border-gray-800">
                     <div className="text-2xl sm:text-3xl mb-1 sm:mb-2">{cat.icon}</div>
-                    <p className="text-white text-xs sm:text-sm font-medium">{cat.label}</p>
-                    <p className="text-gray-500 text-[10px] sm:text-xs">{cat.count} محتوى</p>
+                    <p className="text-white text-xs sm:text-sm font-medium">{t(cat.labelKey)}</p>
+                    <p className="text-gray-500 text-[10px] sm:text-xs">{cat.count} {t('admin.content')}</p>
                   </button>
                 ))}
               </div>
@@ -847,39 +982,7 @@ const AdminDashboard = () => {
           )}
 
           {activeTab === 'channels' && (
-            <div>
-              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-6">
-                <h2 className="text-xl sm:text-2xl font-bold text-white">قنوات التلفزيون</h2>
-                <button onClick={() => { setEditingItem(null); setChannelFormData({ id: '', name: '', nameAr: '', logo: '', url: '', category: 'arabic' }); setShowModal(true); }} className="bg-red-600 text-white px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg flex items-center gap-2 text-sm sm:text-base">
-                  <FaPlus /> إضافة قناة
-                </button>
-              </div>
-              <div className="bg-gray-900 rounded-xl overflow-hidden border border-gray-800 overflow-x-auto">
-                <table className="w-full min-w-[500px]">
-                  <thead className="bg-gray-800">
-                    <tr><th className="px-2 sm:px-4 py-2 sm:py-3 text-right text-white text-xs sm:text-sm">الشعار</th><th className="px-2 sm:px-4 py-2 sm:py-3 text-right text-white text-xs sm:text-sm">الاسم</th><th className="px-2 sm:px-4 py-2 sm:py-3 text-right text-white text-xs sm:text-sm">التصنيف</th><th className="px-2 sm:px-4 py-2 sm:py-3 text-right text-white text-xs sm:text-sm hidden md:table-cell">الرابط</th><th className="px-2 sm:px-4 py-2 sm:py-3 text-right text-white text-xs sm:text-sm">إجراءات</th></tr>
-                  </thead>
-                  <tbody>
-                    {channels.length === 0 ? (
-                      <tr><td colSpan="5" className="text-center py-8 sm:py-12 text-gray-500 text-sm">لا توجد قنوات</td></tr>
-                    ) : (
-                      channels.map(channel => (
-                        <tr key={channel.id} className="border-b border-gray-800">
-                          <td className="px-2 sm:px-4 py-2 sm:py-3"><img src={channel.logo} className="w-6 h-6 sm:w-8 sm:h-8 object-contain" alt={channel.name} /></td>
-                          <td className="px-2 sm:px-4 py-2 sm:py-3 text-white text-xs sm:text-sm">{channel.name}</td>
-                          <td className="px-2 sm:px-4 py-2 sm:py-3"><span className="px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-lg text-[10px] sm:text-xs bg-purple-500/20 text-purple-300">{channel.category}</span></td>
-                          <td className="px-2 sm:px-4 py-2 sm:py-3 text-gray-400 truncate max-w-[120px] sm:max-w-[200px] text-xs hidden md:table-cell">{channel.url}</td>
-                          <td className="px-2 sm:px-4 py-2 sm:py-3 flex gap-1 sm:gap-2">
-                            <button onClick={() => handleChannelEdit(channel)} className="text-blue-400 p-1"><FaEdit className="text-sm sm:text-base" /></button>
-                            <button onClick={() => handleDelete(channel.id)} className="text-red-400 p-1"><FaTrash className="text-sm sm:text-base" /></button>
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
+            <AdminChannelsManager />
           )}
           
           {activeTab === 'clips' && <AdminClipsManager />}
@@ -890,19 +993,37 @@ const AdminDashboard = () => {
           {activeTab === 'comments' && <AdminComments />}
           {activeTab === 'backup' && <AdminBackup />}
           {activeTab === 'roles' && <AdminRoles />}
-          {activeTab === 'channels' && <AdminChannelsManager />}
           
+          {/* Movies & Series tabs */}
           {activeTab !== 'dashboard' && activeTab !== 'channels' && activeTab !== 'clips' && activeTab !== 'reciters' && activeTab !== 'users' && activeTab !== 'songs' && activeTab !== 'statistics' && activeTab !== 'comments' && activeTab !== 'backup' && activeTab !== 'roles' && (
             <div>
               <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-6">
-                <h2 className="text-xl sm:text-2xl font-bold text-white">{menuCategories.find(c => c.id === activeTab)?.label}</h2>
+                <h2 className="text-xl sm:text-2xl font-bold text-white">{t(menuCategories.find(c => c.id === activeTab)?.labelKey)}</h2>
                 <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
                   <div className="relative w-full sm:w-48">
                     <FaSearch className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 text-sm" />
-                    <input type="text" placeholder="بحث..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full bg-gray-800 border border-gray-700 rounded-lg py-1.5 sm:py-2 pr-8 pl-3 text-white text-xs sm:text-sm" />
+                    <input type="text" placeholder={t('common.search') + '...'} value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full bg-gray-800 border border-gray-700 rounded-lg py-1.5 sm:py-2 pr-8 pl-3 text-white text-xs sm:text-sm" />
                   </div>
+                  
+                  {/* ✅ زر جلب من TMDB */}
+                  <button 
+                    onClick={() => { 
+                      setShowTMDBModal(true); 
+                      setTmdbSearchQuery(''); 
+                      setTmdbResults([]); 
+                      setTmdbError(''); 
+                      if (isSeries()) setTmdbSearchType('tv');
+                      else if (isMovie()) setTmdbSearchType('movie');
+                      else setTmdbSearchType('multi');
+                    }} 
+                    className="bg-gradient-to-r from-blue-600 to-cyan-600 text-white px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg flex items-center gap-2 text-sm hover:from-blue-700 hover:to-cyan-700 transition shadow-lg shadow-blue-600/30"
+                  >
+                    <FaDownload className="text-sm" />
+                    <span>{t('admin.actions.fetchFromTMDB')}</span>
+                  </button>
+                  
                   <button onClick={() => { resetForm(); setEditingItem(null); setShowModal(true); }} className="bg-red-600 text-white px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg flex items-center gap-2 text-sm">
-                    <FaPlus className="text-sm" /> إضافة
+                    <FaPlus className="text-sm" /> {isSeries() ? t('admin.movie.addSeries') : t('admin.movie.addMovie')}
                   </button>
                 </div>
               </div>
@@ -910,22 +1031,22 @@ const AdminDashboard = () => {
                 <table className="w-full min-w-[800px]">
                   <thead className="bg-gray-800">
                     <tr>
-                      <th className="px-2 sm:px-4 py-2 sm:py-3 text-right text-white text-xs sm:text-sm">الصورة</th>
-                      <th className="px-2 sm:px-4 py-2 sm:py-3 text-right text-white text-xs sm:text-sm">العنوان</th>
-                      <th className="px-2 sm:px-4 py-2 sm:py-3 text-right text-white text-xs sm:text-sm">التصنيف</th>
-                      <th className="px-2 sm:px-4 py-2 sm:py-3 text-right text-white text-xs sm:text-sm">السنة</th>
-                      <th className="px-2 sm:px-4 py-2 sm:py-3 text-right text-white text-xs sm:text-sm">التقييم</th>
-                      <th className="px-2 sm:px-4 py-2 sm:py-3 text-right text-white text-xs sm:text-sm hidden sm:table-cell">المدة</th>
-                      {isSeries() && <th className="px-2 sm:px-4 py-2 sm:py-3 text-right text-white text-xs sm:text-sm hidden md:table-cell">الحلقات</th>}
-                      <th className="px-2 sm:px-4 py-2 sm:py-3 text-right text-white text-xs sm:text-sm">الترجمات</th>
-                      <th className="px-2 sm:px-4 py-2 sm:py-3 text-right text-white text-xs sm:text-sm hidden sm:table-cell">الصوت</th>
-                      <th className="px-2 sm:px-4 py-2 sm:py-3 text-right text-white text-xs sm:text-sm hidden lg:table-cell">الدولة</th>
-                      <th className="px-2 sm:px-4 py-2 sm:py-3 text-right text-white text-xs sm:text-sm">إجراءات</th>
+                      <th className="px-2 sm:px-4 py-2 sm:py-3 text-right text-white text-xs sm:text-sm">{t('admin.table.image')}</th>
+                      <th className="px-2 sm:px-4 py-2 sm:py-3 text-right text-white text-xs sm:text-sm">{t('admin.table.title')}</th>
+                      <th className="px-2 sm:px-4 py-2 sm:py-3 text-right text-white text-xs sm:text-sm">{t('admin.table.category')}</th>
+                      <th className="px-2 sm:px-4 py-2 sm:py-3 text-right text-white text-xs sm:text-sm">{t('admin.table.year')}</th>
+                      <th className="px-2 sm:px-4 py-2 sm:py-3 text-right text-white text-xs sm:text-sm">{t('admin.table.rating')}</th>
+                      <th className="px-2 sm:px-4 py-2 sm:py-3 text-right text-white text-xs sm:text-sm hidden sm:table-cell">{t('admin.table.duration')}</th>
+                      {isSeries() && <th className="px-2 sm:px-4 py-2 sm:py-3 text-right text-white text-xs sm:text-sm hidden md:table-cell">{t('admin.table.episodes')}</th>}
+                      <th className="px-2 sm:px-4 py-2 sm:py-3 text-right text-white text-xs sm:text-sm">{t('admin.table.subtitles')}</th>
+                      <th className="px-2 sm:px-4 py-2 sm:py-3 text-right text-white text-xs sm:text-sm hidden sm:table-cell">{t('admin.table.audio')}</th>
+                      <th className="px-2 sm:px-4 py-2 sm:py-3 text-right text-white text-xs sm:text-sm hidden lg:table-cell">{t('admin.table.country')}</th>
+                      <th className="px-2 sm:px-4 py-2 sm:py-3 text-right text-white text-xs sm:text-sm">{t('admin.table.actions')}</th>
                     </tr>
                   </thead>
                   <tbody>
                     {filteredData.length === 0 ? (
-                      <tr><td colSpan="10" className="text-center py-8 sm:py-12 text-gray-500 text-sm">لا يوجد محتوى</td></tr>
+                      <tr><td colSpan="10" className="text-center py-8 sm:py-12 text-gray-500 text-sm">{t('admin.actions.noContent')}</td></tr>
                     ) : (
                       filteredData.map(item => (
                         <tr key={item.id} className="border-b border-gray-800">
@@ -937,11 +1058,11 @@ const AdminDashboard = () => {
                           <td className="px-2 sm:px-4 py-2 sm:py-3 text-gray-400 text-xs sm:text-sm hidden sm:table-cell">{item.duration || '-'}</td>
                           {isSeries() && (
                             <td className="px-2 sm:px-4 py-2 sm:py-3 text-blue-400 text-xs sm:text-sm hidden md:table-cell">
-                              {item.episodes?.length || item.episodes_count || 0} حلقة
+                              {item.episodes?.length || item.episodes_count || 0} {t('admin.table.episode')}
                             </td>
                           )}
-                          <td className="px-2 sm:px-4 py-2 sm:py-3"><span className="text-[10px] sm:text-xs text-green-400">{item.subtitles_count || 0}ترجمة</span></td>
-                          <td className="px-2 sm:px-4 py-2 sm:py-3 hidden sm:table-cell"><span className="text-[10px] sm:text-xs text-yellow-400">{item.audioTracks?.length || 0} صوت</span></td>
+                          <td className="px-2 sm:px-4 py-2 sm:py-3"><span className="text-[10px] sm:text-xs text-green-400">{item.subtitles_count || 0} {t('admin.table.subtitle')}</span></td>
+                          <td className="px-2 sm:px-4 py-2 sm:py-3 hidden sm:table-cell"><span className="text-[10px] sm:text-xs text-yellow-400">{item.audioTracks?.length || 0} {t('admin.table.audioTrack')}</span></td>
                           <td className="px-2 sm:px-4 py-2 sm:py-3 text-gray-400 text-xs sm:text-sm hidden lg:table-cell">{item.country || '-'}</td>
                           <td className="px-2 sm:px-4 py-2 sm:py-3 flex gap-1 sm:gap-2">
                             <button onClick={() => handleEdit(item)} className="text-blue-400 p-1"><FaEdit className="text-sm sm:text-base" /></button>
@@ -958,15 +1079,198 @@ const AdminDashboard = () => {
         </main>
       </div>
 
+      {/* ============================================================ */}
+      {/* 🎬 TMDB SEARCH MODAL */}
+      {/* ============================================================ */}
+      {showTMDBModal && (
+        <div 
+          className="fixed inset-0 bg-black/90 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 z-[60] overflow-y-auto" 
+          onClick={() => !tmdbLoadingDetails && setShowTMDBModal(false)}
+        >
+          <div 
+            className="bg-gray-900 rounded-2xl max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col border border-blue-500/30 shadow-2xl shadow-blue-600/20" 
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="sticky top-0 bg-gradient-to-r from-blue-900/50 to-cyan-900/30 p-4 border-b border-gray-800 flex justify-between items-center z-10">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-cyan-600 flex items-center justify-center shadow-lg">
+                  <FaDownload className="text-white text-lg" />
+                </div>
+                <div>
+                  <h3 className="text-white text-lg sm:text-xl font-bold">{t('admin.tmdb.title')}</h3>
+                  <p className="text-gray-400 text-xs">{t('admin.tmdb.subtitle')}</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setShowTMDBModal(false)} 
+                disabled={tmdbLoadingDetails}
+                className="text-gray-400 hover:text-white text-2xl w-9 h-9 flex items-center justify-center rounded-full hover:bg-white/10 transition disabled:opacity-30"
+              >
+                <FaTimes />
+              </button>
+            </div>
+
+            <div className="p-4 border-b border-gray-800 bg-gray-900/50">
+              <div className="flex flex-col sm:flex-row gap-3">
+                <div className="flex-1 relative">
+                  <FaSearch className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-500 text-sm" />
+                  <input
+                    type="text"
+                    placeholder={t('admin.tmdb.placeholder')}
+                    value={tmdbSearchQuery}
+                    onChange={(e) => setTmdbSearchQuery(e.target.value)}
+                    onKeyPress={handleTMDBKeyPress}
+                    disabled={tmdbLoadingDetails}
+                    className="w-full bg-gray-800 border border-gray-700 rounded-xl py-3 pl-11 pr-4 text-white focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 text-sm transition-all disabled:opacity-50"
+                    autoFocus
+                  />
+                </div>
+                <select
+                  value={tmdbSearchType}
+                  onChange={(e) => setTmdbSearchType(e.target.value)}
+                  disabled={tmdbLoadingDetails}
+                  className="bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-white text-sm focus:outline-none focus:border-blue-500 cursor-pointer disabled:opacity-50"
+                >
+                  <option value="multi">{t('admin.tmdb.all')}</option>
+                  <option value="movie">{t('admin.tmdb.movies')}</option>
+                  <option value="tv">{t('admin.tmdb.series')}</option>
+                </select>
+                <button
+                  onClick={searchInTMDB}
+                  disabled={tmdbLoading || tmdbLoadingDetails}
+                  className="bg-gradient-to-r from-blue-600 to-cyan-600 text-white px-6 py-3 rounded-xl font-bold hover:from-blue-700 hover:to-cyan-700 transition disabled:opacity-50 flex items-center justify-center gap-2 shadow-lg shadow-blue-600/30"
+                >
+                  {tmdbLoading ? (
+                    <><FaSyncAlt className="animate-spin" /><span>{t('admin.tmdb.searching')}</span></>
+                  ) : (
+                    <><FaSearch /><span>{t('admin.tmdb.search')}</span></>
+                  )}
+                </button>
+              </div>
+
+              {tmdbLoadingDetails && (
+                <div className="mt-3 bg-blue-500/10 border border-blue-500/30 rounded-xl p-3 flex items-center gap-3">
+                  <FaSyncAlt className="animate-spin text-blue-400" />
+                  <span className="text-blue-300 text-sm">{t('admin.tmdb.fetchingDetails')}</span>
+                </div>
+              )}
+
+              {tmdbError && (
+                <div className="mt-3 bg-red-500/10 border border-red-500/30 rounded-xl p-3 flex items-center gap-2">
+                  <FaExclamationTriangle className="text-red-400" />
+                  <span className="text-red-300 text-sm">{tmdbError}</span>
+                </div>
+              )}
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-4">
+              {tmdbResults.length === 0 && !tmdbLoading && !tmdbError && (
+                <div className="text-center py-12">
+                  <div className="text-6xl mb-4">🎬</div>
+                  <p className="text-gray-400 text-lg mb-2">{t('admin.tmdb.startSearching')}</p>
+                  <p className="text-gray-500 text-sm">{t('admin.tmdb.autoFillMessage')}</p>
+                </div>
+              )}
+
+              {tmdbResults.length > 0 && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                  {tmdbResults.map((item) => (
+                    <div
+                      key={`${item.media_type}-${item.id}`}
+                      className="bg-gray-800 rounded-xl overflow-hidden border border-gray-700 hover:border-blue-500/60 transition-all duration-300 group cursor-pointer hover:-translate-y-1 hover:shadow-xl hover:shadow-blue-600/20"
+                      onClick={() => !tmdbLoadingDetails && fetchTMDBDetails(item.id, item.media_type)}
+                    >
+                      <div className="relative aspect-[2/3] overflow-hidden bg-gray-900">
+                        {item.poster_url ? (
+                          <img
+                            src={item.poster_url}
+                            alt={item.title}
+                            className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
+                            loading="lazy"
+                          />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center text-gray-600">
+                            <FaImage className="text-4xl" />
+                          </div>
+                        )}
+                        
+                        <div className="absolute top-2 left-2 px-2 py-1 rounded-full bg-black/70 backdrop-blur-md border border-white/20">
+                          <span className="text-white text-[10px] font-bold">
+                            {item.media_type === 'movie' ? t('admin.tmdb.movie') : t('admin.tmdb.tvSeries')}
+                          </span>
+                        </div>
+
+                        {item.vote_average > 0 && (
+                          <div className="absolute top-2 right-2 px-2 py-1 rounded-full bg-yellow-500/90 backdrop-blur-md flex items-center gap-1">
+                            <FaStar className="text-white text-[10px]" />
+                            <span className="text-white text-[10px] font-bold">{item.vote_average.toFixed(1)}</span>
+                          </div>
+                        )}
+
+                        <div className="absolute inset-0 bg-gradient-to-t from-blue-900/90 via-blue-900/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center">
+                          <div className="bg-white text-blue-900 px-4 py-2 rounded-full font-bold text-sm flex items-center gap-2 shadow-lg">
+                            <FaDownload />
+                            <span>{t('admin.tmdb.selectAndFill')}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="p-3">
+                        <h4 className="text-white font-bold text-sm line-clamp-1 mb-1">{item.title}</h4>
+                        <div className="flex items-center gap-2 text-gray-400 text-xs">
+                          {item.year && <span>📅 {item.year}</span>}
+                          {item.original_language && <span className="uppercase">🌐 {item.original_language}</span>}
+                        </div>
+                        {item.overview && (
+                          <p className="text-gray-500 text-xs mt-2 line-clamp-2">{item.overview}</p>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="p-3 border-t border-gray-800 bg-gray-900/50 text-center">
+              <p className="text-gray-500 text-xs">
+                {t('admin.tmdb.poweredBy')}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Modal for Movies/Series */}
       {showModal && activeTab !== 'channels' && (
         <div className="fixed inset-0 bg-black/90 flex items-center justify-center p-3 sm:p-4 z-50 overflow-y-auto" onClick={() => setShowModal(false)}>
           <div className="bg-gray-900 rounded-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
             <div className="sticky top-0 bg-gray-900 p-3 sm:p-4 border-b border-gray-800 flex justify-between items-center">
-              <h3 className="text-white text-base sm:text-xl font-bold">{editingItem ? 'تعديل' : 'إضافة'} {menuCategories.find(c => c.id === activeTab)?.label}</h3>
+              <h3 className="text-white text-base sm:text-xl font-bold">
+                {editingItem ? t('admin.actions.edit') : t('admin.actions.add')} {t(menuCategories.find(c => c.id === activeTab)?.labelKey)}
+              </h3>
               <button onClick={() => setShowModal(false)} className="text-gray-400 hover:text-white text-2xl">&times;</button>
             </div>
             <form onSubmit={handleSubmit} className="p-4 sm:p-5 space-y-4">
+              {selectedTMDBItem && (
+                <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-3 mb-4 flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-lg bg-blue-500/20 flex items-center justify-center">
+                    <FaDownload className="text-blue-400 text-sm" />
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-blue-300 text-sm font-bold">{t('admin.movie.tmdbImported')}</p>
+                    <p className="text-gray-400 text-xs">TMDB ID: {selectedTMDBItem.tmdb_id}</p>
+                  </div>
+                  <a 
+                    href={selectedTMDBItem.tmdb_url} 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="text-blue-400 hover:text-blue-300 text-xs underline"
+                  >
+                    {t('admin.movie.viewOnTMDB')} →
+                  </a>
+                </div>
+              )}
+
               {saveError && (
                 <div className="bg-red-500/10 border border-red-500 rounded-lg p-3 text-red-400 text-sm flex items-center gap-2">
                   <FaExclamationTriangle /> {saveError}
@@ -974,48 +1278,75 @@ const AdminDashboard = () => {
               )}
               
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
-                <input type="text" placeholder="العنوان (عربي)" value={formData.title} onChange={(e) => setFormData({...formData, title: e.target.value})} className="bg-gray-800 border border-gray-700 rounded-lg p-2 text-white text-sm" required />
-                <input type="text" placeholder="العنوان (Français)" value={formData.titleFr} onChange={(e) => setFormData({...formData, titleFr: e.target.value})} className="bg-gray-800 border border-gray-700 rounded-lg p-2 text-white text-sm" />
-                <input type="text" placeholder="العنوان (English)" value={formData.titleAr} onChange={(e) => setFormData({...formData, titleAr: e.target.value})} className="bg-gray-800 border border-gray-700 rounded-lg p-2 text-white text-sm" />
+                <input type="text" placeholder={t('admin.movie.titleAr')} value={formData.title} onChange={(e) => setFormData({...formData, title: e.target.value})} className="bg-gray-800 border border-gray-700 rounded-lg p-2 text-white text-sm" required />
+                <input type="text" placeholder={t('admin.movie.titleFr')} value={formData.titleFr} onChange={(e) => setFormData({...formData, titleFr: e.target.value})} className="bg-gray-800 border border-gray-700 rounded-lg p-2 text-white text-sm" />
+                <input type="text" placeholder={t('admin.movie.titleEn')} value={formData.titleAr} onChange={(e) => setFormData({...formData, titleAr: e.target.value})} className="bg-gray-800 border border-gray-700 rounded-lg p-2 text-white text-sm" />
                 
                 {!isSeries() && (
-                  <input type="url" placeholder="رابط الفيديو" value={formData.videoUrl} onChange={(e) => setFormData({...formData, videoUrl: e.target.value})} className="bg-gray-800 border border-gray-700 rounded-lg p-2 text-white text-sm" required />
+                  <input type="url" placeholder={t('admin.movie.videoUrl')} value={formData.videoUrl} onChange={(e) => setFormData({...formData, videoUrl: e.target.value})} className="bg-gray-800 border border-gray-700 rounded-lg p-2 text-white text-sm" required />
                 )}
                 
-                <input type="url" placeholder="رابط الملصق (Poster)" value={formData.poster} onChange={(e) => setFormData({...formData, poster: e.target.value})} className="bg-gray-800 border border-gray-700 rounded-lg p-2 text-white text-sm" required />
-                <input type="url" placeholder="رابط الخلفية (Backdrop)" value={formData.backdrop} onChange={(e) => setFormData({...formData, backdrop: e.target.value})} className="bg-gray-800 border border-gray-700 rounded-lg p-2 text-white text-sm" />
+                <input type="url" placeholder={t('admin.movie.poster')} value={formData.poster} onChange={(e) => setFormData({...formData, poster: e.target.value})} className="bg-gray-800 border border-gray-700 rounded-lg p-2 text-white text-sm" required />
+                <input type="url" placeholder={t('admin.movie.backdrop')} value={formData.backdrop} onChange={(e) => setFormData({...formData, backdrop: e.target.value})} className="bg-gray-800 border border-gray-700 rounded-lg p-2 text-white text-sm" />
               </div>
 
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
-                <input type="number" step="0.1" placeholder="التقييم" value={formData.rating} onChange={(e) => setFormData({...formData, rating: e.target.value})} className="bg-gray-800 border border-gray-700 rounded-lg p-2 text-white text-sm" required />
+                <input type="number" step="0.1" placeholder={t('movie.rating')} value={formData.rating} onChange={(e) => setFormData({...formData, rating: e.target.value})} className="bg-gray-800 border border-gray-700 rounded-lg p-2 text-white text-sm" required />
                 <select value={formData.year} onChange={(e) => setFormData({...formData, year: e.target.value})} className="bg-gray-800 border border-gray-700 rounded-lg p-2 text-white text-sm">
                   {years.map(y => <option key={y} value={y}>{y}</option>)}
                 </select>
-                <input type="text" placeholder="المدة (مثال: 2:15)" value={formData.duration} onChange={(e) => setFormData({...formData, duration: e.target.value})} className="bg-gray-800 border border-gray-700 rounded-lg p-2 text-white text-sm" />
+                <input type="text" placeholder={t('movie.duration')} value={formData.duration} onChange={(e) => setFormData({...formData, duration: e.target.value})} className="bg-gray-800 border border-gray-700 rounded-lg p-2 text-white text-sm" />
                 <select value={formData.country} onChange={(e) => setFormData({...formData, country: e.target.value})} className="bg-gray-800 border border-gray-700 rounded-lg p-2 text-white text-sm">
-                  <option value="">اختر الدولة</option>
+                  <option value="">{t('admin.movie.chooseCountry')}</option>
                   {countries.map(c => <option key={c} value={c}>{c}</option>)}
                 </select>
                 <select value={formData.genre} onChange={(e) => setFormData({...formData, genre: e.target.value})} className="bg-gray-800 border border-gray-700 rounded-lg p-2 text-white text-sm">
-                  <option value="">اختر التصنيف</option>
+                  <option value="">{t('admin.movie.chooseGenre')}</option>
                   {genres.map(g => <option key={g} value={g}>{g}</option>)}
                 </select>
-                <input type="text" placeholder="المخرج" value={formData.director} onChange={(e) => setFormData({...formData, director: e.target.value})} className="bg-gray-800 border border-gray-700 rounded-lg p-2 text-white text-sm" />
-                <input type="text" placeholder="طاقم التمثيل" value={formData.cast} onChange={(e) => setFormData({...formData, cast: e.target.value})} className="bg-gray-800 border border-gray-700 rounded-lg p-2 text-white text-sm" />
+                <input 
+    type="text" 
+    placeholder={t('admin.movie.director')} 
+    value={formData.director} 
+    onChange={(e) => setFormData({...formData, director: e.target.value})} 
+    className="bg-gray-800 border border-gray-700 rounded-lg p-2 text-white text-sm" 
+/>
+                <input 
+    type="text" 
+    placeholder={t('admin.movie.cast')} 
+    value={formData.cast} 
+    onChange={(e) => setFormData({...formData, cast: e.target.value})} 
+    className="bg-gray-800 border border-gray-700 rounded-lg p-2 text-white text-sm" 
+/>
                 {isSeries() && (
-                  <input type="number" placeholder="عدد المواسم" value={formData.seasons} onChange={(e) => setFormData({...formData, seasons: e.target.value})} className="bg-gray-800 border border-gray-700 rounded-lg p-2 text-white text-sm" />
+                  <input 
+        type="number" 
+        placeholder={t('admin.movie.seasonsCount')} 
+        value={formData.seasons} 
+        onChange={(e) => setFormData({...formData, seasons: e.target.value})} 
+        className="bg-gray-800 border border-gray-700 rounded-lg p-2 text-white text-sm" 
+      />
                 )}
               </div>
 
-              <textarea rows="2" placeholder="القصة (عربي)" value={formData.description} onChange={(e) => setFormData({...formData, description: e.target.value})} className="w-full bg-gray-800 border border-gray-700 rounded-lg p-2 text-white text-sm"></textarea>
+              <textarea 
+        rows="2" 
+        placeholder={t('admin.movie.descriptionAr')} 
+        value={formData.descriptionAr} 
+        onChange={(e) => setFormData({...formData, descriptionAr: e.target.value})} 
+        className="w-full bg-gray-800 border border-gray-700 rounded-lg p-2 text-white text-sm"
+      ></textarea>
               <div className="grid grid-cols-2 gap-3 sm:gap-4">
-                <textarea rows="2" placeholder="القصة (Français)" value={formData.descriptionFr} onChange={(e) => setFormData({...formData, descriptionFr: e.target.value})} className="bg-gray-800 border border-gray-700 rounded-lg p-2 text-white text-sm"></textarea>
-                <textarea rows="2" placeholder="القصة (English)" value={formData.descriptionAr} onChange={(e) => setFormData({...formData, descriptionAr: e.target.value})} className="bg-gray-800 border border-gray-700 rounded-lg p-2 text-white text-sm"></textarea>
+                <textarea rows="2" placeholder={t('admin.movie.descriptionFr')} value={formData.descriptionFr} onChange={(e) => setFormData({...formData, descriptionFr: e.target.value})} className="bg-gray-800 border border-gray-700 rounded-lg p-2 text-white text-sm"></textarea>
+                <textarea rows="2" placeholder={t('admin.movie.descriptionEn')} value={formData.description} onChange={(e) => setFormData({...formData, description: e.target.value})} className="bg-gray-800 border border-gray-700 rounded-lg p-2 text-white text-sm"></textarea>
               </div>
 
               {/* الترجمات */}
               <div className="border-t border-gray-800 pt-4">
-                <div className="flex items-center gap-2 mb-2"><FaClosedCaptioning className="text-red-500" /><h4 className="text-white font-bold">الترجمات (Subtitles) - ملفات بصيغة VTT</h4></div>
+                <div className="flex items-center gap-2 mb-2">
+                  <FaClosedCaptioning className="text-red-500" />
+                  <h4 className="text-white font-bold">{t('admin.movie.subtitlesSection')}</h4>
+                </div>
                 <div className="flex flex-wrap gap-2 mb-2">
                   {subtitlesList.map((sub, i) => (
                     <div key={i} className="bg-gray-800 rounded-lg px-2 py-1 flex items-center gap-1">
@@ -1028,15 +1359,26 @@ const AdminDashboard = () => {
                   <select value={newSubtitle.lang} onChange={(e) => setNewSubtitle({...newSubtitle, lang: e.target.value})} className="bg-gray-800 rounded-lg p-1 text-white text-xs">
                     {languages.map(l => <option key={l.code} value={l.code}>{l.label}</option>)}
                   </select>
-                  <input type="text" placeholder="التسمية" value={newSubtitle.label} onChange={(e) => setNewSubtitle({...newSubtitle, label: e.target.value})} className="bg-gray-800 rounded-lg p-1 text-white text-xs" />
-                  <input type="url" placeholder="رابط الترجمة (.vtt)" value={newSubtitle.url} onChange={(e) => setNewSubtitle({...newSubtitle, url: e.target.value})} className="col-span-2 bg-gray-800 rounded-lg p-1 text-white text-xs" />
+                  <input type="text" placeholder={t('admin.movie.label')} value={newSubtitle.label} onChange={(e) => setNewSubtitle({...newSubtitle, label: e.target.value})} className="bg-gray-800 rounded-lg p-1 text-white text-xs" />
+                  <input type="url" placeholder={t('admin.movie.subtitleUrl')} value={newSubtitle.url} onChange={(e) => setNewSubtitle({...newSubtitle, url: e.target.value})} className="col-span-2 bg-gray-800 rounded-lg p-1 text-white text-xs" />
                 </div>
-                <button type="button" onClick={addSubtitle} className="mt-2 bg-green-600 text-white px-2 py-1 rounded text-xs w-full">+ إضافة ترجمة</button>
+                <button 
+                  type="button" 
+                  onClick={addSubtitle} 
+                  className="mt-2 bg-green-600 text-white px-2 py-1 rounded text-xs w-full"
+                >
+                  {t('admin.movie.addSubtitle')}
+                </button>
               </div>
 
               {/* المسارات الصوتية */}
               <div className="border-t border-gray-800 pt-4">
-                <div className="flex items-center gap-2 mb-2"><FaMicrophoneAlt className="text-red-500" /><h4 className="text-white font-bold">المسارات الصوتية (Audio Tracks)</h4></div>
+                <div className="flex items-center gap-2 mb-2">
+                  <FaMicrophoneAlt className="text-red-500" />
+                  <h4 className="text-white font-bold">
+                    {t('admin.movie.audioTracksSection')}
+                  </h4>
+                </div>
                 <div className="flex flex-wrap gap-2 mb-2">
                   {audioTracksList.map((audio, i) => (
                     <div key={i} className="bg-gray-800 rounded-lg px-2 py-1 flex items-center gap-1">
@@ -1049,36 +1391,54 @@ const AdminDashboard = () => {
                   <select value={newAudioTrack.lang} onChange={(e) => setNewAudioTrack({...newAudioTrack, lang: e.target.value})} className="bg-gray-800 rounded-lg p-1 text-white text-xs">
                     {languages.map(l => <option key={l.code} value={l.code}>{l.label}</option>)}
                   </select>
-                  <input type="text" placeholder="التسمية" value={newAudioTrack.label} onChange={(e) => setNewAudioTrack({...newAudioTrack, label: e.target.value})} className="bg-gray-800 rounded-lg p-1 text-white text-xs" />
-                  <input type="url" placeholder="رابط الصوت (MP3/M4A)" value={newAudioTrack.url} onChange={(e) => setNewAudioTrack({...newAudioTrack, url: e.target.value})} className="col-span-2 bg-gray-800 rounded-lg p-1 text-white text-xs" />
+                  <input type="text" placeholder={t('admin.movie.label')} value={newAudioTrack.label} onChange={(e) => setNewAudioTrack({...newAudioTrack, label: e.target.value})} className="bg-gray-800 rounded-lg p-1 text-white text-xs" />
+                  <input type="url" placeholder={t('admin.movie.audioUrl')} value={newAudioTrack.url} onChange={(e) => setNewAudioTrack({...newAudioTrack, url: e.target.value})} className="col-span-2 bg-gray-800 rounded-lg p-1 text-white text-xs" />
                 </div>
-                <button type="button" onClick={addAudioTrack} className="mt-2 bg-green-600 text-white px-2 py-1 rounded text-xs w-full">+ إضافة مسار صوتي</button>
+                <button 
+                  type="button" 
+                  onClick={addAudioTrack} 
+                  className="mt-2 bg-green-600 text-white px-2 py-1 rounded text-xs w-full"
+                >
+                  {t('admin.movie.addAudioTrack')}
+                </button>
               </div>
 
               {/* الإعدادات الافتراضية */}
               <div className="grid grid-cols-2 gap-3 border-t border-gray-800 pt-4">
-                <div><label className="text-gray-400 text-xs">الترجمة الافتراضية</label><select value={formData.defaultSubtitle} onChange={(e) => setFormData({...formData, defaultSubtitle: e.target.value})} className="w-full bg-gray-800 border border-gray-700 rounded-lg p-1 text-white text-xs mt-1"><option value="">-- بدون --</option>{subtitlesList.map((sub, i) => (<option key={i} value={sub.lang}>{sub.label}</option>))}</select></div>
-                <div><label className="text-gray-400 text-xs">المسار الصوتي الافتراضي</label><select value={formData.defaultAudio} onChange={(e) => setFormData({...formData, defaultAudio: e.target.value})} className="w-full bg-gray-800 border border-gray-700 rounded-lg p-1 text-white text-xs mt-1"><option value="">-- الصوت الأصلي --</option>{audioTracksList.map((audio, i) => (<option key={i} value={audio.lang}>{audio.label}</option>))}</select></div>
+                <div>
+                  <label className="text-gray-400 text-xs">{t('admin.movie.defaultSubtitle')}</label>
+                  <select value={formData.defaultSubtitle} onChange={(e) => setFormData({...formData, defaultSubtitle: e.target.value})} className="w-full bg-gray-800 border border-gray-700 rounded-lg p-1 text-white text-xs mt-1">
+                    <option value="">{t('admin.movie.noSubtitles')}</option>
+                    {subtitlesList.map((sub, i) => (<option key={i} value={sub.lang}>{sub.label}</option>))}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-gray-400 text-xs">{t('admin.movie.defaultAudio')}</label>
+                  <select value={formData.defaultAudio} onChange={(e) => setFormData({...formData, defaultAudio: e.target.value})} className="w-full bg-gray-800 border border-gray-700 rounded-lg p-1 text-white text-xs mt-1">
+                    <option value="">{t('admin.movie.originalAudio')}</option>
+                    {audioTracksList.map((audio, i) => (<option key={i} value={audio.lang}>{audio.label}</option>))}
+                  </select>
+                </div>
               </div>
 
               {/* الحلقات للمسلسلات */}
               {isSeries() && (
                 <div className="border-t border-gray-800 pt-4">
                   <div className="flex justify-between items-center mb-3">
-                    <h4 className="text-white font-bold">الحلقات ({episodesList.length})</h4>
+                    <h4 className="text-white font-bold">{t('admin.movie.episodesSection')} ({episodesList.length})</h4>
                     <button type="button" onClick={() => { setShowEpisodeModal(true); }} className="bg-green-600 text-white px-2 py-1 rounded text-xs flex items-center gap-1">
-                      <FaPlus size={12} /> إضافة حلقة
+                      <FaPlus size={12} /> {t('admin.movie.addEpisode')}
                     </button>
                   </div>
                   <div className="space-y-2 max-h-60 overflow-y-auto">
                     {episodesList.length === 0 ? (
-                      <div className="text-center py-4 text-gray-500 text-sm">لا توجد حلقات مضافة</div>
+                      <div className="text-center py-4 text-gray-500 text-sm">{t('admin.movie.noEpisodes')}</div>
                     ) : (
                       episodesList.map(ep => (
                         <div key={ep.id} className="bg-gray-800 rounded-lg p-2">
                           <div className="flex justify-between items-center">
                             <div>
-                              <span className="text-red-400 font-bold text-xs">الحلقة {ep.number}</span>
+                              <span className="text-red-400 font-bold text-xs">{t('movie.episode')} {ep.number}</span>
                               <p className="text-white text-xs">{ep.title}</p>
                               <p className="text-gray-500 text-[10px]">{ep.duration}</p>
                             </div>
@@ -1093,10 +1453,10 @@ const AdminDashboard = () => {
 
               <div className="flex gap-3 pt-4">
                 <button type="submit" disabled={saving} className="flex-1 bg-red-600 text-white py-2 rounded-lg hover:bg-red-700 transition text-sm disabled:opacity-50 flex items-center justify-center gap-2">
-                  {saving ? <FaSyncAlt className="animate-spin" /> : <FaSave />} {saving ? 'جاري الحفظ...' : 'حفظ'}
+                  {saving ? <FaSyncAlt className="animate-spin" /> : <FaSave />} {saving ? t('admin.actions.saving') : t('admin.actions.save')}
                 </button>
                 <button type="button" onClick={() => setShowModal(false)} className="flex-1 bg-gray-700 text-white py-2 rounded-lg hover:bg-gray-600 transition text-sm">
-                  <FaTimes className="inline ml-1" /> إلغاء
+                  <FaTimes className="inline ml-1" /> {t('admin.actions.cancel')}
                 </button>
               </div>
             </form>
@@ -1106,30 +1466,25 @@ const AdminDashboard = () => {
 
       {/* Modal for Episode */}
       {showEpisodeModal && (
-        <div className="fixed inset-0 bg-black/90 flex items-center justify-center p-3 sm:p-4 z-50" onClick={() => setShowEpisodeModal(false)}>
+        <div className="fixed inset-0 bg-black/90 flex items-center justify-center p-3 sm:p-4 z-[70]" onClick={() => setShowEpisodeModal(false)}>
           <div className="bg-gray-900 rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
             <div className="p-3 sm:p-4 border-b border-gray-800">
-              <h3 className="text-white text-base sm:text-xl font-bold">إضافة حلقة جديدة</h3>
-              <p className="text-gray-400 text-xs mt-1">ملاحظة: رقم الحلقة وعنوان الحلقة ورابط الفيديو إجباري</p>
+              <h3 className="text-white text-base sm:text-xl font-bold">{t('admin.episode.addNew')}</h3>
             </div>
             <div className="p-4 sm:p-5 space-y-4">
               <div className="grid grid-cols-2 gap-2 sm:gap-3">
-                <input type="number" placeholder="رقم الحلقة *" value={episodeFormData.number} onChange={(e) => setEpisodeFormData({...episodeFormData, number: e.target.value})} className="bg-gray-800 border border-gray-700 rounded-lg p-2 text-white text-sm" required />
-                <input type="text" placeholder="عنوان الحلقة *" value={episodeFormData.title} onChange={(e) => setEpisodeFormData({...episodeFormData, title: e.target.value})} className="bg-gray-800 border border-gray-700 rounded-lg p-2 text-white text-sm" required />
-                <input type="text" placeholder="المدة" value={episodeFormData.duration} onChange={(e) => setEpisodeFormData({...episodeFormData, duration: e.target.value})} className="bg-gray-800 border border-gray-700 rounded-lg p-2 text-white text-sm" />
-                <input type="url" placeholder="رابط الفيديو *" value={episodeFormData.videoUrl} onChange={(e) => setEpisodeFormData({...episodeFormData, videoUrl: e.target.value})} className="bg-gray-800 border border-gray-700 rounded-lg p-2 text-white text-sm" required />
-                <input type="text" placeholder="رقم الموسم (اختياري)" value={episodeFormData.season_num} onChange={(e) => setEpisodeFormData({...episodeFormData, season_num: e.target.value})} className="bg-gray-800 border border-gray-700 rounded-lg p-2 text-white text-sm" />
-                <input type="url" placeholder="رابط الصورة المصغرة (اختياري)" value={episodeFormData.thumbnail} onChange={(e) => setEpisodeFormData({...episodeFormData, thumbnail: e.target.value})} className="bg-gray-800 border border-gray-700 rounded-lg p-2 text-white text-sm" />
+                <input type="number" placeholder={t('admin.episode.number')} value={episodeFormData.number} onChange={(e) => setEpisodeFormData({...episodeFormData, number: e.target.value})} className="bg-gray-800 border border-gray-700 rounded-lg p-2 text-white text-sm" required />
+                <input type="text" placeholder={t('admin.episode.title')} value={episodeFormData.title} onChange={(e) => setEpisodeFormData({...episodeFormData, title: e.target.value})} className="bg-gray-800 border border-gray-700 rounded-lg p-2 text-white text-sm" required />
+                <input type="text" placeholder={t('admin.episode.duration')} value={episodeFormData.duration} onChange={(e) => setEpisodeFormData({...episodeFormData, duration: e.target.value})} className="bg-gray-800 border border-gray-700 rounded-lg p-2 text-white text-sm" />
+                <input type="url" placeholder={t('admin.episode.videoUrl')} value={episodeFormData.videoUrl} onChange={(e) => setEpisodeFormData({...episodeFormData, videoUrl: e.target.value})} className="bg-gray-800 border border-gray-700 rounded-lg p-2 text-white text-sm" required />
+                <input type="text" placeholder={t('admin.episode.seasonNum')} value={episodeFormData.season_num} onChange={(e) => setEpisodeFormData({...episodeFormData, season_num: e.target.value})} className="bg-gray-800 border border-gray-700 rounded-lg p-2 text-white text-sm" />
+                <input type="url" placeholder={t('admin.episode.thumbnail')} value={episodeFormData.thumbnail} onChange={(e) => setEpisodeFormData({...episodeFormData, thumbnail: e.target.value})} className="bg-gray-800 border border-gray-700 rounded-lg p-2 text-white text-sm" />
               </div>
-              <textarea rows="2" placeholder="وصف الحلقة (اختياري)" value={episodeFormData.description} onChange={(e) => setEpisodeFormData({...episodeFormData, description: e.target.value})} className="w-full bg-gray-800 border border-gray-700 rounded-lg p-2 text-white text-sm"></textarea>
-              
-              <div><h4 className="text-white font-medium text-sm mb-2">ترجمات الحلقة</h4><div className="flex gap-2 mb-2 flex-wrap">{episodeSubtitles.map((s, i) => (<div key={i} className="bg-gray-800 rounded-lg px-2 py-1 flex items-center gap-2"><span className="text-gray-300 text-xs">{s.label}</span><button onClick={() => removeEpisodeSubtitle(i)} className="text-red-400 text-xs">✕</button></div>))}</div><div className="flex gap-2"><select value={newEpisodeSubtitle.lang} onChange={(e) => setNewEpisodeSubtitle({...newEpisodeSubtitle, lang: e.target.value})} className="bg-gray-800 rounded-lg p-1 text-white text-xs flex-1">{languages.map(l => <option key={l.code} value={l.code}>{l.label}</option>)}</select><input type="text" placeholder="رابط الترجمة (.vtt)" value={newEpisodeSubtitle.url} onChange={(e) => setNewEpisodeSubtitle({...newEpisodeSubtitle, url: e.target.value})} className="flex-2 bg-gray-800 rounded-lg p-1 text-white text-xs" /><button onClick={addEpisodeSubtitle} className="bg-green-600 text-white px-2 py-1 rounded text-xs">+</button></div></div>
-              
-              <div><h4 className="text-white font-medium text-sm mb-2">أصوات الحلقة</h4><div className="flex gap-2 mb-2 flex-wrap">{episodeAudioTracks.map((a, i) => (<div key={i} className="bg-gray-800 rounded-lg px-2 py-1 flex items-center gap-2"><span className="text-gray-300 text-xs">{a.label}</span><button onClick={() => removeEpisodeAudio(i)} className="text-red-400 text-xs">✕</button></div>))}</div><div className="flex gap-2"><select value={newEpisodeAudio.lang} onChange={(e) => setNewEpisodeAudio({...newEpisodeAudio, lang: e.target.value})} className="bg-gray-800 rounded-lg p-1 text-white text-xs flex-1">{languages.map(l => <option key={l.code} value={l.code}>{l.label}</option>)}</select><input type="text" placeholder="رابط الصوت (MP3)" value={newEpisodeAudio.url} onChange={(e) => setNewEpisodeAudio({...newEpisodeAudio, url: e.target.value})} className="flex-2 bg-gray-800 rounded-lg p-1 text-white text-xs" /><button onClick={addEpisodeAudio} className="bg-green-600 text-white px-2 py-1 rounded text-xs">+</button></div></div>
+              <textarea rows="2" placeholder={t('admin.episode.description')} value={episodeFormData.description} onChange={(e) => setEpisodeFormData({...episodeFormData, description: e.target.value})} className="w-full bg-gray-800 border border-gray-700 rounded-lg p-2 text-white text-sm"></textarea>
               
               <div className="flex gap-3 pt-3">
-                <button onClick={addEpisode} className="flex-1 bg-red-600 text-white py-2 rounded-lg hover:bg-red-700 text-sm">إضافة الحلقة</button>
-                <button onClick={() => setShowEpisodeModal(false)} className="flex-1 bg-gray-700 text-white py-2 rounded-lg hover:bg-gray-600 text-sm">إلغاء</button>
+                <button type="button" onClick={addEpisode} className="flex-1 bg-red-600 text-white py-2 rounded-lg hover:bg-red-700 text-sm">{t('admin.episode.add')}</button>
+                <button type="button" onClick={() => setShowEpisodeModal(false)} className="flex-1 bg-gray-700 text-white py-2 rounded-lg hover:bg-gray-600 text-sm">{t('admin.episode.cancel')}</button>
               </div>
             </div>
           </div>
@@ -1140,21 +1495,25 @@ const AdminDashboard = () => {
       {showModal && activeTab === 'channels' && (
         <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-3 sm:p-4 z-50" onClick={() => setShowModal(false)}>
           <div className="bg-gray-900 rounded-2xl max-w-md w-full" onClick={(e) => e.stopPropagation()}>
-            <div className="p-3 sm:p-4 border-b border-gray-800"><h3 className="text-white text-base sm:text-xl font-bold">{editingItem ? 'تعديل' : 'إضافة'} قناة</h3></div>
+            <div className="p-3 sm:p-4 border-b border-gray-800">
+              <h3 className="text-white text-base sm:text-xl font-bold">
+                {editingItem ? t('admin.actions.edit') : t('admin.actions.add')} {t('admin.channel.addChannel')}
+              </h3>
+            </div>
             <form onSubmit={handleChannelSubmit} className="p-4 sm:p-5 space-y-3">
-              <input type="text" placeholder="اسم القناة" value={channelFormData.name} onChange={(e) => setChannelFormData({...channelFormData, name: e.target.value})} className="w-full bg-gray-800 border border-gray-700 rounded-lg p-2 text-white text-sm" required />
-              <input type="text" placeholder="اسم القناة (عربي)" value={channelFormData.nameAr} onChange={(e) => setChannelFormData({...channelFormData, nameAr: e.target.value})} className="w-full bg-gray-800 border border-gray-700 rounded-lg p-2 text-white text-sm" />
-              <input type="url" placeholder="رابط الشعار" value={channelFormData.logo} onChange={(e) => setChannelFormData({...channelFormData, logo: e.target.value})} className="w-full bg-gray-800 border border-gray-700 rounded-lg p-2 text-white text-sm" required />
-              <input type="url" placeholder="رابط البث (m3u8)" value={channelFormData.url} onChange={(e) => setChannelFormData({...channelFormData, url: e.target.value})} className="w-full bg-gray-800 border border-gray-700 rounded-lg p-2 text-white text-sm" required />
+              <input type="text" placeholder={t('admin.channel.name')} value={channelFormData.name} onChange={(e) => setChannelFormData({...channelFormData, name: e.target.value})} className="w-full bg-gray-800 border border-gray-700 rounded-lg p-2 text-white text-sm" required />
+              <input type="text" placeholder={t('admin.channel.nameAr')} value={channelFormData.nameAr} onChange={(e) => setChannelFormData({...channelFormData, nameAr: e.target.value})} className="w-full bg-gray-800 border border-gray-700 rounded-lg p-2 text-white text-sm" />
+              <input type="url" placeholder={t('admin.channel.logo')} value={channelFormData.logo} onChange={(e) => setChannelFormData({...channelFormData, logo: e.target.value})} className="w-full bg-gray-800 border border-gray-700 rounded-lg p-2 text-white text-sm" required />
+              <input type="url" placeholder={t('admin.channel.streamUrl')} value={channelFormData.url} onChange={(e) => setChannelFormData({...channelFormData, url: e.target.value})} className="w-full bg-gray-800 border border-gray-700 rounded-lg p-2 text-white text-sm" required />
               <select value={channelFormData.category} onChange={(e) => setChannelFormData({...channelFormData, category: e.target.value})} className="w-full bg-gray-800 border border-gray-700 rounded-lg p-2 text-white text-sm">
-                {channelCategories.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
+                {channelCategories.map(c => <option key={c.id} value={c.id}>{t(c.labelKey)}</option>)}
               </select>
               <div className="flex gap-3 pt-3">
                 <button type="submit" disabled={saving} className="flex-1 bg-red-600 text-white py-2 rounded-lg hover:bg-red-700 text-sm disabled:opacity-50 flex items-center justify-center gap-2">
-                  {saving ? <FaSyncAlt className="animate-spin" /> : <FaSave />} حفظ
+                  {saving ? <FaSyncAlt className="animate-spin" /> : <FaSave />} {t('admin.actions.save')}
                 </button>
                 <button type="button" onClick={() => setShowModal(false)} className="flex-1 bg-gray-700 text-white py-2 rounded-lg hover:bg-gray-600 text-sm">
-                  <FaTimes className="inline ml-1" /> إلغاء
+                  <FaTimes className="inline ml-1" /> {t('admin.actions.cancel')}
                 </button>
               </div>
             </form>

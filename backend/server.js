@@ -1,4 +1,6 @@
-// server.js - النسخة الكاملة مع دعم CORS للترجمات + audio_url للقنوات
+// ============================================================
+// server.js - CineWave Backend مع TMDB Integration
+// ============================================================
 const express = require('express');
 const cors = require('cors');
 const bcrypt = require('bcryptjs');
@@ -8,6 +10,7 @@ const fs = require('fs');
 const crypto = require('crypto');
 const { exec } = require('child_process');
 const { promisify } = require('util');
+const axios = require('axios');
 const db = require('./db');
 require('dotenv').config();
 
@@ -41,7 +44,8 @@ app.use((req, res, next) => {
     next();
 });
 
-app.use(express.json());
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
 function getLocalIp() {
     const { networkInterfaces } = require('os');
@@ -123,13 +127,10 @@ app.use('/data', videoMiddleware, express.static(DATA_DIR, {
     }
 }));
 
-// ============================================================
-// ========== THUMBNAILS ==========
-// ============================================================
 app.use('/thumbnails', videoMiddleware, express.static(THUMB_DIR));
 
 // ============================================================
-// ✅ API لجلب ملفات الترجمة (يتجاوز CORS تماماً)
+// ✅ API لجلب ملفات الترجمة
 // ============================================================
 app.get('/api/subtitle', async (req, res) => {
     try {
@@ -144,21 +145,14 @@ app.get('/api/subtitle', async (req, res) => {
 
         const filePath = path.join(DATA_DIR, cleanPath);
 
-        console.log('📥 طلب ترجمة:', cleanPath);
-        console.log('📁 المسار:', filePath);
-        console.log('📂 موجود؟', fs.existsSync(filePath));
-
         if (!fs.existsSync(filePath)) {
-            return res.status(404).json({ message: 'ملف الترجمة غير موجود', path: filePath });
+            return res.status(404).json({ message: 'ملف الترجمة غير موجود' });
         }
 
         const content = fs.readFileSync(filePath, 'utf-8');
 
         res.setHeader('Content-Type', 'text/vtt; charset=utf-8');
         res.setHeader('Access-Control-Allow-Origin', '*');
-        res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
-        res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Accept, Origin');
-        res.setHeader('Access-Control-Expose-Headers', 'Content-Length, Content-Type');
         res.setHeader('Cache-Control', 'public, max-age=3600');
 
         res.send(content);
@@ -180,7 +174,7 @@ app.get('/api/thumbnail', async (req, res) => {
         const videoPath = path.join(DATA_DIR, cleanPath);
 
         if (!fs.existsSync(videoPath)) {
-            return res.status(404).json({ message: 'Video not found', path: videoPath });
+            return res.status(404).json({ message: 'Video not found' });
         }
 
         const videoHash = getHash(video);
@@ -224,10 +218,6 @@ app.post('/api/thumbnail-url', async (req, res) => {
     try {
         const { videoUrl } = req.body;
 
-        console.log('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-        console.log('🎬 طلب thumbnail جديد');
-        console.log('📥 الرابط الأصلي:', videoUrl);
-
         if (!videoUrl) return res.status(400).json({ message: 'videoUrl مطلوب' });
 
         let cleanPath = videoUrl;
@@ -239,17 +229,8 @@ app.post('/api/thumbnail-url', async (req, res) => {
 
         const videoPath = path.join(DATA_DIR, cleanPath);
 
-        console.log('🧹 المسار النظيف:', cleanPath);
-        console.log('📁 مسار الفيديو:', videoPath);
-        console.log('📂 موجود؟', fs.existsSync(videoPath));
-
         if (!fs.existsSync(videoPath)) {
-            return res.status(404).json({
-                message: 'الفيديو غير موجود',
-                path: videoPath,
-                cleanPath: cleanPath,
-                originalUrl: videoUrl
-            });
+            return res.status(404).json({ message: 'الفيديو غير موجود', cleanPath });
         }
 
         const videoDir = path.dirname(videoPath);
@@ -261,20 +242,14 @@ app.post('/api/thumbnail-url', async (req, res) => {
         for (const thumbName of possibleThumbnails) {
             const localThumb = path.join(videoDir, thumbName);
             if (fs.existsSync(localThumb)) {
-                console.log(`✅ وُجدت صورة جاهزة: ${thumbName}`);
-
                 const hash = getHash(videoUrl);
                 const targetName = `local_${hash}.jpg`;
                 const targetPath = path.join(THUMB_DIR, targetName);
 
                 if (!fs.existsSync(targetPath)) {
                     fs.copyFileSync(localThumb, targetPath);
-                    console.log('📋 تم نسخ الصورة إلى:', targetName);
-                } else {
-                    console.log('✅ الصورة موجودة مسبقاً في cache');
                 }
 
-                console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
                 return res.json({
                     thumbnail: `/thumbnails/${targetName}`,
                     cached: true,
@@ -283,18 +258,11 @@ app.post('/api/thumbnail-url', async (req, res) => {
             }
         }
 
-        console.log('⚠️ لا توجد صورة جاهزة، سنولّدها بـ FFmpeg...');
-
         const hash = getHash(videoUrl);
         const thumbName = `gen_${hash}.jpg`;
         const thumbPath = path.join(THUMB_DIR, thumbName);
 
-        console.log('🔑 Hash (MD5):', hash);
-        console.log('🖼️ اسم الصورة:', thumbName);
-
         if (fs.existsSync(thumbPath)) {
-            console.log('✅ مولّدة مسبقاً (cache hit)');
-            console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
             return res.json({
                 thumbnail: `/thumbnails/${thumbName}`,
                 cached: true,
@@ -310,18 +278,12 @@ app.post('/api/thumbnail-url', async (req, res) => {
             );
             const duration = parseFloat(stdout.trim());
             if (duration && isFinite(duration) && duration > 0) midTime = Math.floor(duration / 2);
-            console.log('⏱️ المدة:', duration, 'ثانية - منتصف:', midTime);
-        } catch (e) {
-            console.warn('⚠️ ffprobe failed:', e.message);
-        }
+        } catch (e) {}
 
         try {
             const cmd = `ffmpeg -ss ${midTime} -i "${videoPath}" -vframes 1 -vf "scale=480:-1" -q:v 4 -y "${thumbPath}"`;
-            console.log('🎥 تنفيذ ffmpeg...');
             await execAsync(cmd, { timeout: 30000 });
-            console.log('✅ تم التوليد');
         } catch (e) {
-            console.error('❌ ffmpeg failed:', e.message);
             return res.status(500).json({ message: 'فشل توليد الصورة', error: e.message });
         }
 
@@ -329,7 +291,6 @@ app.post('/api/thumbnail-url', async (req, res) => {
             return res.status(500).json({ message: 'الصورة لم تُنشأ' });
         }
 
-        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
         res.json({
             thumbnail: `/thumbnails/${thumbName}`,
             cached: false,
@@ -345,7 +306,9 @@ app.post('/api/thumbnail-url', async (req, res) => {
 console.log(`📁 مسار ملفات البيانات: ${DATA_DIR}`);
 console.log(`🎬 مجلد Thumbnails: ${THUMB_DIR}`);
 
+// ============================================================
 // ========== MIDDLEWARE ==========
+// ============================================================
 const verifyToken = (req, res, next) => {
     const token = req.headers['authorization']?.split(' ')[1];
     if (!token) return res.status(401).json({ message: 'غير مصرح' });
@@ -359,7 +322,9 @@ const verifyToken = (req, res, next) => {
     }
 };
 
+// ============================================================
 // ========== TABLES ==========
+// ============================================================
 const initTables = async () => {
     try {
         await db.execute(`CREATE TABLE IF NOT EXISTS users (
@@ -464,8 +429,6 @@ const ensureWatchlistTable = async () => {
                 await db.execute(`ALTER TABLE watchlist ADD FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE`);
             } catch (fkError) {}
             console.log('✅ تم إنشاء جدول watchlist');
-        } else {
-            console.log('✅ جدول watchlist موجود');
         }
     } catch (error) {
         console.error('❌ خطأ:', error);
@@ -474,9 +437,6 @@ const ensureWatchlistTable = async () => {
 
 ensureWatchlistTable();
 
-// ============================================================
-// ✅ التأكد من وجود عمود audio_url في جدول channels
-// ============================================================
 const ensureChannelAudioUrl = async () => {
     try {
         const [columns] = await db.execute(`
@@ -490,8 +450,6 @@ const ensureChannelAudioUrl = async () => {
         if (columns.length === 0) {
             await db.execute(`ALTER TABLE channels ADD COLUMN audio_url TEXT DEFAULT NULL AFTER url`);
             console.log('✅ تم إضافة عمود audio_url إلى جدول channels');
-        } else {
-            console.log('✅ عمود audio_url موجود في جدول channels');
         }
     } catch (error) {
         console.error('⚠️ خطأ في التأكد من عمود audio_url:', error.message);
@@ -500,7 +458,382 @@ const ensureChannelAudioUrl = async () => {
 
 ensureChannelAudioUrl();
 
+// ============================================================
+// ========== TMDB API INTEGRATION ==========
+// ============================================================
+const TMDB_API_KEY = process.env.TMDB_API_KEY;
+const TMDB_BASE_URL = process.env.TMDB_BASE_URL || 'https://api.themoviedb.org/3';
+const TMDB_IMAGE_BASE_URL = process.env.TMDB_IMAGE_BASE_URL || 'https://image.tmdb.org/t/p';
+const TMDB_DEFAULT_LANGUAGE = process.env.TMDB_LANGUAGE || 'ar';
+
+if (!TMDB_API_KEY) {
+    console.warn('⚠️ تحذير: TMDB_API_KEY غير موجود في ملف .env');
+    console.warn('⚠️ ميزات TMDB لن تعمل');
+} else {
+    console.log(`✅ TMDB API Key loaded: ${TMDB_API_KEY.substring(0, 8)}...`);
+}
+
+const searchTMDB = async (query, type = 'multi', language = TMDB_DEFAULT_LANGUAGE) => {
+    const response = await axios.get(`${TMDB_BASE_URL}/search/${type}`, {
+        params: { api_key: TMDB_API_KEY, query, language, include_adult: false, page: 1 },
+        timeout: 15000
+    });
+    return response.data;
+};
+
+const getTMDBDetails = async (tmdbId, type = 'movie', language = TMDB_DEFAULT_LANGUAGE) => {
+    const response = await axios.get(`${TMDB_BASE_URL}/${type}/${tmdbId}`, {
+        params: {
+            api_key: TMDB_API_KEY,
+            language,
+            append_to_response: 'credits,videos,images,external_ids,similar,recommendations'
+        },
+        timeout: 15000
+    });
+    return response.data;
+};
+
+const buildImageUrl = (imagePath, size = 'w500') => {
+    if (!imagePath) return null;
+    return `${TMDB_IMAGE_BASE_URL}/${size}${imagePath}`;
+};
+
+const extractDirector = (credits) => {
+    if (!credits?.crew) return null;
+    const directors = credits.crew.filter(c => c.job === 'Director');
+    return directors.map(d => d.name).join(', ') || null;
+};
+
+const extractCast = (credits, limit = 10) => {
+    if (!credits?.cast) return null;
+    return credits.cast.slice(0, limit).map(c => c.name).join(', ') || null;
+};
+
+const extractGenres = (genres) => {
+    if (!Array.isArray(genres)) return null;
+    return genres.map(g => g.name).join(', ') || null;
+};
+
+const formatRuntime = (minutes) => {
+    if (!minutes) return null;
+    const hours = Math.floor(minutes / 60);
+    const mins = minutes % 60;
+    if (hours > 0) return `${hours}h ${mins}min`;
+    return `${mins}min`;
+};
+
+const mapCountryToCategory = (countryCode, type) => {
+    if (type === 'tv') {
+        const seriesMap = {
+            'SA': 'arabic', 'EG': 'arabic', 'MA': 'arabic', 'AE': 'arabic',
+            'US': 'foreign', 'GB': 'foreign', 'FR': 'foreign', 'DE': 'foreign',
+            'IN': 'indian', 'TR': 'turkish', 'KR': 'korean'
+        };
+        return seriesMap[countryCode] || 'foreign';
+    } else {
+        const movieMap = {
+            'SA': 'arabwood', 'EG': 'arabwood', 'MA': 'arabwood', 'AE': 'arabwood',
+            'US': 'hollywood', 'GB': 'hollywood',
+            'IN': 'bollywood',
+            'FR': 'european', 'DE': 'european', 'IT': 'european', 'ES': 'european',
+            'JP': 'asian', 'CN': 'asian', 'KR': 'asian', 'TH': 'asian'
+        };
+        return movieMap[countryCode] || 'hollywood';
+    }
+};
+
+// 🔍 البحث في TMDB
+app.get('/api/tmdb/search', async (req, res) => {
+    try {
+        if (!TMDB_API_KEY) {
+            return res.status(500).json({ success: false, message: 'TMDB API Key غير مُعدّ' });
+        }
+
+        const { query, type = 'multi', language = TMDB_DEFAULT_LANGUAGE } = req.query;
+        
+        if (!query || !query.trim()) {
+            return res.status(400).json({ success: false, message: 'الرجاء إدخال كلمة البحث' });
+        }
+
+        console.log(`🔍 [TMDB] بحث: "${query}" | النوع: ${type}`);
+        
+        const data = await searchTMDB(query, type, language);
+        
+        const filteredResults = (data.results || [])
+            .filter(item => {
+                if (type !== 'multi') return true;
+                return item.media_type === 'movie' || item.media_type === 'tv';
+            })
+            .slice(0, 20)
+            .map(item => ({
+                id: item.id,
+                media_type: item.media_type || type,
+                title: item.title || item.name,
+                original_title: item.original_title || item.original_name,
+                overview: item.overview,
+                poster_path: item.poster_path,
+                backdrop_path: item.backdrop_path,
+                release_date: item.release_date || item.first_air_date,
+                vote_average: item.vote_average,
+                vote_count: item.vote_count,
+                popularity: item.popularity,
+                original_language: item.original_language,
+                poster_url: buildImageUrl(item.poster_path, 'w500'),
+                backdrop_url: buildImageUrl(item.backdrop_path, 'w780'),
+                year: (item.release_date || item.first_air_date || '').split('-')[0]
+            }));
+
+        console.log(`✅ [TMDB] تم العثور على ${filteredResults.length} نتيجة`);
+        
+        res.json({
+            success: true,
+            total_results: filteredResults.length,
+            results: filteredResults
+        });
+    } catch (error) {
+        console.error('❌ [TMDB] خطأ:', error.message);
+        res.status(500).json({ 
+            success: false, 
+            message: error.response?.data?.status_message || error.message 
+        });
+    }
+});
+
+// 📥 جلب تفاصيل كاملة
+app.get('/api/tmdb/details/:type/:id', async (req, res) => {
+    try {
+        if (!TMDB_API_KEY) {
+            return res.status(500).json({ success: false, message: 'TMDB API Key غير مُعدّ' });
+        }
+
+        const { type, id } = req.params;
+        const { language = TMDB_DEFAULT_LANGUAGE } = req.query;
+
+        if (!['movie', 'tv'].includes(type)) {
+            return res.status(400).json({ success: false, message: 'النوع يجب أن يكون movie أو tv' });
+        }
+
+        console.log(`📥 [TMDB] جلب تفاصيل ${type} #${id}`);
+
+        const [dataAr, dataEn] = await Promise.all([
+            getTMDBDetails(id, type, 'ar').catch(() => null),
+            getTMDBDetails(id, type, 'en-US').catch(() => null)
+        ]);
+
+        const data = dataAr || dataEn;
+        if (!data) {
+            return res.status(404).json({ success: false, message: 'لم يتم العثور على المحتوى' });
+        }
+
+        const isMovie = type === 'movie';
+        const productionCountry = data.production_countries?.[0]?.iso_3166_1 
+            || data.origin_country?.[0] 
+            || 'US';
+
+        const category = mapCountryToCategory(productionCountry, type);
+
+        const runtime = isMovie 
+            ? formatRuntime(data.runtime)
+            : (data.number_of_seasons ? `${data.number_of_seasons} مواسم` : null);
+
+        const releaseYear = (data.release_date || data.first_air_date || '').split('-')[0];
+
+        const result = {
+            tmdb_id: data.id,
+            media_type: type,
+            title: dataAr?.title || dataAr?.name || dataEn?.title || dataEn?.name,
+            title_ar: dataAr?.title || dataAr?.name || null,
+            title_en: dataEn?.title || dataEn?.name || null,
+            original_title: data.original_title || data.original_name,
+            description: dataAr?.overview || dataEn?.overview || null,
+            description_ar: dataAr?.overview || null,
+            description_en: dataEn?.overview || null,
+            poster: buildImageUrl(data.poster_path, 'w500'),
+            backdrop: buildImageUrl(data.backdrop_path, 'w1280'),
+            rating: data.vote_average ? parseFloat(data.vote_average.toFixed(1)) : 0,
+            vote_count: data.vote_count || 0,
+            year: releaseYear ? parseInt(releaseYear) : null,
+            duration: runtime,
+            runtime: data.runtime || null,
+            genre: extractGenres(data.genres),
+            genres_list: data.genres || [],
+            category: category,
+            director: extractDirector(data.credits),
+            cast: extractCast(data.credits, 10),
+            country: productionCountry,
+            country_name: data.production_countries?.[0]?.name || null,
+            original_language: data.original_language,
+            seasons: data.number_of_seasons || null,
+            episodes_count: data.number_of_episodes || null,
+            seasons_data: (data.seasons || []).map(s => ({
+                season_number: s.season_number,
+                name: s.name,
+                episode_count: s.episode_count,
+                poster: buildImageUrl(s.poster_path, 'w500'),
+                air_date: s.air_date
+            })),
+            imdb_id: data.external_ids?.imdb_id || data.imdb_id || null,
+            tmdb_url: `https://www.themoviedb.org/${type}/${data.id}`,
+            tagline: data.tagline || null,
+            status: data.status,
+            popularity: data.popularity
+        };
+
+        console.log(`✅ [TMDB] تم جلب: ${result.title} (${result.year})`);
+        res.json({ success: true, data: result });
+    } catch (error) {
+        console.error('❌ [TMDB] خطأ:', error.message);
+        res.status(500).json({ success: false, message: error.message });
+    }
+});
+
+// 📺 جلب موسم وحلقاته
+app.get('/api/tmdb/season/:seriesId/:seasonNumber', async (req, res) => {
+    try {
+        if (!TMDB_API_KEY) return res.status(500).json({ success: false, message: 'TMDB API Key غير مُعدّ' });
+
+        const { seriesId, seasonNumber } = req.params;
+        const { language = TMDB_DEFAULT_LANGUAGE } = req.query;
+
+        const response = await axios.get(`${TMDB_BASE_URL}/tv/${seriesId}/season/${seasonNumber}`, {
+            params: { api_key: TMDB_API_KEY, language },
+            timeout: 15000
+        });
+
+        const episodes = (response.data.episodes || []).map(ep => ({
+            episode_number: ep.episode_number,
+            season_number: ep.season_number,
+            title: ep.name,
+            title_ar: ep.name,
+            description: ep.overview,
+            air_date: ep.air_date,
+            vote_average: ep.vote_average,
+            runtime: ep.runtime,
+            duration: formatRuntime(ep.runtime),
+            still_path: ep.still_path,
+            thumbnail: buildImageUrl(ep.still_path, 'w500')
+        }));
+
+        res.json({
+            success: true,
+            season_number: parseInt(seasonNumber),
+            name: response.data.name,
+            overview: response.data.overview,
+            poster: buildImageUrl(response.data.poster_path, 'w500'),
+            episodes
+        });
+    } catch (error) {
+        console.error('❌ [TMDB] خطأ:', error.message);
+        res.status(500).json({ success: false, message: error.message });
+    }
+});
+
+// 🎬 جميع المواسم مع حلقاتها
+app.get('/api/tmdb/seasons/:seriesId', async (req, res) => {
+    try {
+        if (!TMDB_API_KEY) return res.status(500).json({ success: false, message: 'TMDB API Key غير مُعدّ' });
+
+        const { seriesId } = req.params;
+        const { language = TMDB_DEFAULT_LANGUAGE } = req.query;
+
+        const seriesDetails = await getTMDBDetails(seriesId, 'tv', language);
+        
+        const seasons = await Promise.all(
+            (seriesDetails.seasons || [])
+                .filter(s => s.season_number > 0)
+                .map(async (s) => {
+                    let episodes = [];
+                    try {
+                        const epRes = await axios.get(`${TMDB_BASE_URL}/tv/${seriesId}/season/${s.season_number}`, {
+                            params: { api_key: TMDB_API_KEY, language },
+                            timeout: 15000
+                        });
+                        
+                        episodes = (epRes.data.episodes || []).map(ep => ({
+                            episode_number: ep.episode_number,
+                            season_number: ep.season_number,
+                            title: ep.name,
+                            description: ep.overview,
+                            air_date: ep.air_date,
+                            vote_average: ep.vote_average,
+                            runtime: ep.runtime,
+                            duration: formatRuntime(ep.runtime),
+                            thumbnail: buildImageUrl(ep.still_path, 'w500')
+                        }));
+                    } catch (err) {}
+
+                    return {
+                        season_number: s.season_number,
+                        name: s.name,
+                        overview: s.overview,
+                        poster: buildImageUrl(s.poster_path, 'w500'),
+                        air_date: s.air_date,
+                        episode_count: s.episode_count,
+                        episodes
+                    };
+                })
+        );
+
+        res.json({
+            success: true,
+            series_title: seriesDetails.name,
+            total_seasons: seriesDetails.number_of_seasons,
+            total_episodes: seriesDetails.number_of_episodes,
+            seasons
+        });
+    } catch (error) {
+        console.error('❌ [TMDB] خطأ:', error.message);
+        res.status(500).json({ success: false, message: error.message });
+    }
+});
+
+// 🔥 الأكثر شعبية
+app.get('/api/tmdb/popular/:type', async (req, res) => {
+    try {
+        if (!TMDB_API_KEY) return res.status(500).json({ success: false, message: 'TMDB API Key غير مُعدّ' });
+
+        const { type = 'movie' } = req.params;
+        const { language = TMDB_DEFAULT_LANGUAGE, page = 1 } = req.query;
+
+        if (!['movie', 'tv'].includes(type)) {
+            return res.status(400).json({ success: false, message: 'النوع يجب أن يكون movie أو tv' });
+        }
+
+        const response = await axios.get(`${TMDB_BASE_URL}/${type}/popular`, {
+            params: { api_key: TMDB_API_KEY, language, page },
+            timeout: 15000
+        });
+
+        const results = (response.data.results || []).map(item => ({
+            id: item.id,
+            media_type: type,
+            title: item.title || item.name,
+            overview: item.overview,
+            poster_url: buildImageUrl(item.poster_path, 'w500'),
+            backdrop_url: buildImageUrl(item.backdrop_path, 'w780'),
+            release_date: item.release_date || item.first_air_date,
+            vote_average: item.vote_average,
+            original_language: item.original_language,
+            year: (item.release_date || item.first_air_date || '').split('-')[0]
+        }));
+
+        res.json({
+            success: true,
+            page: response.data.page,
+            total_pages: response.data.total_pages,
+            results
+        });
+    } catch (error) {
+        console.error('❌ [TMDB] خطأ:', error.message);
+        res.status(500).json({ success: false, message: error.message });
+    }
+});
+
+console.log('✅ TMDB API Routes registered');
+
+// ============================================================
 // ========== AUTH ==========
+// ============================================================
 app.post('/api/auth/register', async (req, res) => {
     try {
         const { name, email, password } = req.body;
@@ -525,13 +858,15 @@ app.post('/api/auth/login', async (req, res) => {
         const isValid = await bcrypt.compare(password, user.password);
         if (!isValid) return res.status(401).json({ message: 'بيانات غير صحيحة' });
         const token = jwt.sign({ id: user.id, role: user.role }, process.env.JWT_SECRET);
-        res.json({ token, user: { id: user.id, name: user.name, email: user.email, role: user.role } });
+        res.json({ token, user: { id: user.id, name: user.name, email: user.email, role: user.role, plan: user.plan } });
     } catch (error) {
         res.status(500).json({ message: error.message });
     }
 });
 
+// ============================================================
 // ========== MOVIES ==========
+// ============================================================
 app.get('/api/movies', async (req, res) => {
     try {
         const [movies] = await db.execute(`SELECT m.*, 
@@ -650,14 +985,6 @@ app.post('/api/movies/:movieId/subtitles', verifyToken, async (req, res) => {
     } catch (error) { res.status(500).json({ message: error.message }); }
 });
 
-app.delete('/api/movies/:movieId/subtitles/:subtitleId', verifyToken, async (req, res) => {
-    if (req.userRole !== 'admin') return res.status(403).json({ message: 'غير مصرح' });
-    try {
-        await db.execute('DELETE FROM movie_subtitles WHERE id = ? AND movie_id = ?', [req.params.subtitleId, req.params.movieId]);
-        res.json({ message: 'تم حذف الترجمة' });
-    } catch (error) { res.status(500).json({ message: error.message }); }
-});
-
 app.get('/api/movies/:movieId/audio-tracks', async (req, res) => {
     try {
         const [tracks] = await db.execute('SELECT * FROM movie_audio_tracks WHERE movie_id = ?', [req.params.movieId]);
@@ -675,15 +1002,9 @@ app.post('/api/movies/:movieId/audio-tracks', verifyToken, async (req, res) => {
     } catch (error) { res.status(500).json({ message: error.message }); }
 });
 
-app.delete('/api/movies/:movieId/audio-tracks/:trackId', verifyToken, async (req, res) => {
-    if (req.userRole !== 'admin') return res.status(403).json({ message: 'غير مصرح' });
-    try {
-        await db.execute('DELETE FROM movie_audio_tracks WHERE id = ? AND movie_id = ?', [req.params.trackId, req.params.movieId]);
-        res.json({ message: 'تم حذف المسار الصوتي' });
-    } catch (error) { res.status(500).json({ message: error.message }); }
-});
-
+// ============================================================
 // ========== SERIES ==========
+// ============================================================
 app.get('/api/series', async (req, res) => {
     try {
         const [series] = await db.execute('SELECT * FROM series ORDER BY created_at DESC');
@@ -808,7 +1129,9 @@ app.delete('/api/series/:seriesId/episodes/:episodeId', verifyToken, async (req,
     } catch (error) { res.status(500).json({ message: error.message }); }
 });
 
+// ============================================================
 // ========== CHANNELS ==========
+// ============================================================
 app.get('/api/channels', async (req, res) => {
     try {
         const [channels] = await db.execute('SELECT * FROM channels WHERE is_active = 1 ORDER BY id');
@@ -848,7 +1171,9 @@ app.delete('/api/channels/:id', verifyToken, async (req, res) => {
     } catch (error) { res.status(500).json({ message: error.message }); }
 });
 
+// ============================================================
 // ========== ARTISTS ==========
+// ============================================================
 app.get('/api/artists', async (req, res) => {
     try {
         const [artists] = await db.execute('SELECT * FROM artists ORDER BY created_at DESC');
@@ -894,7 +1219,9 @@ app.delete('/api/artists/:id', verifyToken, async (req, res) => {
     } catch (error) { res.status(500).json({ message: error.message }); }
 });
 
+// ============================================================
 // ========== CLIPS ==========
+// ============================================================
 app.get('/api/clips', async (req, res) => {
     try {
         const [clips] = await db.execute(`SELECT c.*, a.name as artist_name, a.image as artist_image 
@@ -996,7 +1323,9 @@ app.post('/api/clips/:clipId/like', verifyToken, async (req, res) => {
     } catch (error) { res.status(500).json({ message: error.message }); }
 });
 
+// ============================================================
 // ========== SONGS ==========
+// ============================================================
 app.get('/api/songs', async (req, res) => {
     try {
         const [songs] = await db.execute('SELECT * FROM songs ORDER BY created_at DESC');
@@ -1058,7 +1387,9 @@ app.delete('/api/songs/:id', verifyToken, async (req, res) => {
     } catch (error) { res.status(500).json({ message: error.message }); }
 });
 
+// ============================================================
 // ========== RECITERS ==========
+// ============================================================
 app.get('/api/reciters', async (req, res) => {
     try {
         const [reciters] = await db.execute('SELECT * FROM reciters ORDER BY name');
@@ -1109,7 +1440,9 @@ app.delete('/api/reciters/:id', verifyToken, async (req, res) => {
     } catch (error) { res.status(500).json({ message: error.message }); }
 });
 
+// ============================================================
 // ========== WATCHLIST ==========
+// ============================================================
 app.get('/api/watchlist', verifyToken, async (req, res) => {
     try {
         const [items] = await db.execute(`SELECT 
@@ -1199,7 +1532,9 @@ app.delete('/api/watchlist/clear', verifyToken, async (req, res) => {
     } catch (error) { res.status(500).json({ message: error.message }); }
 });
 
+// ============================================================
 // ========== COMMENTS ==========
+// ============================================================
 app.get('/api/admin/comments', verifyToken, async (req, res) => {
     if (req.userRole !== 'admin') return res.status(403).json({ message: 'غير مصرح' });
     try {
@@ -1231,25 +1566,9 @@ app.post('/api/comments', verifyToken, async (req, res) => {
     } catch (error) { res.status(500).json({ message: error.message }); }
 });
 
-app.put('/api/admin/comments/:commentId/status', verifyToken, async (req, res) => {
-    if (req.userRole !== 'admin') return res.status(403).json({ message: 'غير مصرح' });
-    try {
-        const { commentId } = req.params;
-        const { status } = req.body;
-        await db.execute('UPDATE comments SET status = ? WHERE id = ?', [status, commentId]);
-        res.json({ message: 'تم التحديث' });
-    } catch (error) { res.status(500).json({ message: error.message }); }
-});
-
-app.delete('/api/admin/comments/:commentId', verifyToken, async (req, res) => {
-    if (req.userRole !== 'admin') return res.status(403).json({ message: 'غير مصرح' });
-    try {
-        await db.execute('DELETE FROM comments WHERE id = ?', [req.params.commentId]);
-        res.json({ message: 'تم الحذف' });
-    } catch (error) { res.status(500).json({ message: error.message }); }
-});
-
+// ============================================================
 // ========== SUBSCRIPTIONS ==========
+// ============================================================
 app.get('/api/subscription/plans', verifyToken, async (req, res) => {
     try {
         const [plans] = await db.execute('SELECT * FROM subscription_plans WHERE is_active = 1 ORDER BY price ASC');
@@ -1266,7 +1585,9 @@ app.get('/api/subscription/current', verifyToken, async (req, res) => {
     } catch (error) { res.status(500).json({ message: error.message }); }
 });
 
+// ============================================================
 // ========== HISTORY ==========
+// ============================================================
 app.get('/api/history', verifyToken, async (req, res) => {
     try {
         const [history] = await db.execute(`SELECT h.*, 
@@ -1302,7 +1623,9 @@ app.delete('/api/history/clear', verifyToken, async (req, res) => {
     } catch (error) { res.status(500).json({ message: error.message }); }
 });
 
+// ============================================================
 // ========== ADMIN ==========
+// ============================================================
 app.get('/api/admin/users', verifyToken, async (req, res) => {
     if (req.userRole !== 'admin') return res.status(403).json({ message: 'غير مصرح' });
     try {
@@ -1345,7 +1668,9 @@ app.delete('/api/admin/users/:id', verifyToken, async (req, res) => {
     } catch (error) { res.status(500).json({ message: error.message }); }
 });
 
+// ============================================================
 // ========== SEARCH ==========
+// ============================================================
 app.get('/api/search/all', async (req, res) => {
     try {
         const query = `%${req.query.q || ''}%`;
@@ -1377,5 +1702,6 @@ app.listen(PORT, '0.0.0.0', () => {
     console.log(`✅ Local Thumbnail.jpg Support`);
     console.log(`✅ MD5 Hash (unique per video)`);
     console.log(`✅ Audio URL Support for Channels 🎵`);
+    console.log(`✅ TMDB API Integration 🎬`);
     console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`);
 });
